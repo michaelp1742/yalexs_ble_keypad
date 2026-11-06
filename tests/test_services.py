@@ -194,13 +194,21 @@ async def test_reload_keeps_stored_pins(
 
 
 @pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    "name_field",
+    [
+        pytest.param({}, id="absent"),
+        pytest.param({"name": ""}, id="empty"),
+    ],
+)
 async def test_set_credential_without_name_keeps_existing(
     hass: HomeAssistant,
     mock_lock: MockLock,
     entry: MockConfigEntry,
     hass_storage: dict[str, Any],
+    name_field: dict[str, str],
 ) -> None:
-    """Test setting a PIN without a name replaces the PIN and keeps the slot's name."""
+    """Test a set with no name or an empty name replaces the PIN and keeps the name."""
     await _call(
         hass,
         "set_lock_credential",
@@ -209,10 +217,36 @@ async def test_set_credential_without_name_keeps_existing(
     await _call(
         hass,
         "set_lock_credential",
-        {"credential_data": "5678", "credential_index": 5},
+        {"credential_data": "5678", "credential_index": 5, **name_field},
     )
 
     assert _stored_pins(hass_storage, entry) == {"5": {"pin": "5678", "name": "Guest"}}
+
+
+@pytest.mark.usefixtures("entry")
+async def test_set_credential_empty_name_on_empty_slot_stores_no_name(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
+) -> None:
+    """Test an empty name on a slot with no record stores the PIN with no name."""
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "5678", "credential_index": 5, "name": ""},
+    )
+    mock_lock.push_lock.get_keycode.return_value = "5678"
+
+    response = await _call(
+        hass,
+        "get_lock_credential_status",
+        {"credential_index": 5},
+        return_response=True,
+    )
+
+    assert _stored_pins(hass_storage, entry) == {"5": {"pin": "5678", "name": None}}
+    assert response == {ENTITY_ID: {"credential_exists": True, "name": None}}
 
 
 @pytest.mark.usefixtures("entry")
