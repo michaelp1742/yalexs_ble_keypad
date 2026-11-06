@@ -42,6 +42,7 @@ from .const import (
     YaleXSBLEKeypadServiceArgument,
 )
 from .models import YaleXSBLEKeypadConfigEntry
+from .store import StoredPin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -162,20 +163,23 @@ async def _async_set_credential(
         raise ServiceValidationError(
             translation_domain=DOMAIN, translation_key="invalid_pin"
         )
-    credential_names = entry.runtime_data.credential_names
+    pins = entry.runtime_data.pins
     try:
         with _translate_keycode_errors():
             await entry.runtime_data.lock.set_keycode(slot, pin)
     except HomeAssistantError as err:
         if not _keycode_slot_unchanged(err.__cause__):
-            await credential_names.async_remove(slot)
+            await pins.async_remove(slot)
         raise
     except asyncio.CancelledError:
-        # Programming may have started, so the old label might be wrong.
-        await credential_names.async_remove(slot)
+        # Programming may have started, so the slot's record might be wrong.
+        await pins.async_remove(slot)
         raise
-    if name := data.get(YaleXSBLEKeypadServiceArgument.NAME):
-        await credential_names.async_set(slot, name)
+    if not (name := data.get(YaleXSBLEKeypadServiceArgument.NAME)) and (
+        stored := pins.get(slot)
+    ):
+        name = stored.name
+    await pins.async_set(slot, StoredPin(pin=pin, name=name))
 
 
 async def _async_clear_credential(
@@ -184,19 +188,19 @@ async def _async_clear_credential(
     """Clear a keypad PIN on the entry's lock."""
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot)
-    credential_names = entry.runtime_data.credential_names
+    pins = entry.runtime_data.pins
     try:
         with _translate_keycode_errors():
             await entry.runtime_data.lock.clear_keycode(slot)
     except HomeAssistantError as err:
         if not _keycode_slot_unchanged(err.__cause__):
-            await credential_names.async_remove(slot)
+            await pins.async_remove(slot)
         raise
     except asyncio.CancelledError:
-        # The PIN may already be gone, so the old label might be wrong.
-        await credential_names.async_remove(slot)
+        # The PIN may already be gone, so the slot's record might be wrong.
+        await pins.async_remove(slot)
         raise
-    await credential_names.async_remove(slot)
+    await pins.async_remove(slot)
 
 
 async def _async_credential_status(
@@ -207,9 +211,10 @@ async def _async_credential_status(
     _check_slot(slot)
     with _translate_keycode_errors():
         exists = await entry.runtime_data.lock.get_keycode(slot) is not None
+    stored = entry.runtime_data.pins.get(slot) if exists else None
     return {
         "credential_exists": exists,
-        "name": entry.runtime_data.credential_names.get(slot) if exists else None,
+        "name": stored.name if stored else None,
     }
 
 

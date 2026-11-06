@@ -1,6 +1,7 @@
 """Test the Yale Access Bluetooth lock credential services."""
 
 import asyncio
+from copy import deepcopy
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +15,7 @@ from yalexs_ble.const import OperationError
 from yalexs_ble.session import ResponseError
 
 from custom_components.yalexs_ble_keypad.const import DOMAIN, OWNER_DOMAIN
-from custom_components.yalexs_ble_keypad.store import CredentialNames
+from custom_components.yalexs_ble_keypad.store import PinStore
 from homeassistant.components.lock import DOMAIN as LOCK_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_ADDRESS
@@ -31,7 +32,8 @@ from . import ADDRESS, TITLE, async_setup_owner
 
 ENTITY_ID = "lock.front_door"
 SECURE_ENTITY_ID = "lock.front_door_secure_mode"
-STORAGE_KEY = "yalexs_ble_keypad.{}.credentials"
+STORAGE_KEY = "yalexs_ble_keypad.{}.pins"
+GUEST = {"3": {"pin": "4321", "name": "Guest"}}
 
 
 class MockLock:
@@ -90,6 +92,22 @@ async def entry(
     return config_entry
 
 
+def _stored_pins(
+    hass_storage: dict[str, Any], entry: MockConfigEntry
+) -> dict[str, dict[str, str | None]]:
+    """Return the PINs in the entry's store file."""
+    return hass_storage[STORAGE_KEY.format(entry.entry_id)]["data"]["pins"]
+
+
+async def _set_guest(hass: HomeAssistant) -> None:
+    """Store PIN 4321 named Guest at slot 3 through the set action."""
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "4321", "credential_index": 3, "name": "Guest"},
+    )
+
+
 def _call(
     hass: HomeAssistant, service: str, data: dict[str, Any], **kwargs: Any
 ) -> Any:
@@ -104,13 +122,13 @@ def _call(
 
 
 @pytest.mark.usefixtures("entry")
-async def test_set_credential_stores_name(
+async def test_set_credential_stores_pin_and_name(
     hass: HomeAssistant,
     mock_lock: MockLock,
     entry: MockConfigEntry,
     hass_storage: dict[str, Any],
 ) -> None:
-    """Test setting a PIN with a name stores it and survives a reload."""
+    """Test setting a PIN with a name stores both for the slot."""
     await _call(
         hass,
         "set_lock_credential",
@@ -118,14 +136,38 @@ async def test_set_credential_stores_name(
     )
 
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(205, "1234")
-    assert hass_storage[STORAGE_KEY.format(entry.entry_id)]["data"] == {
-        "names": {"205": "Jesse"}
+    assert _stored_pins(hass_storage, entry) == {
+        "205": {"pin": "1234", "name": "Jesse"}
     }
+
+
+async def test_reload_keeps_stored_pins(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
+) -> None:
+    """Test the stored PINs survive a reload, with the store file unchanged."""
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "1234", "credential_index": 12, "name": "Cleaner"},
+    )
+    stored = deepcopy(hass_storage[STORAGE_KEY.format(entry.entry_id)])
 
     await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
+    mock_lock.push_lock.get_keycode.return_value = "1234"
+    response = await _call(
+        hass,
+        "get_lock_credential_status",
+        {"credential_index": 12},
+        return_response=True,
+    )
+
     assert entry.state is ConfigEntryState.LOADED
-    assert entry.runtime_data.credential_names.get(205) == "Jesse"
+    assert response == {ENTITY_ID: {"credential_exists": True, "name": "Cleaner"}}
+    assert hass_storage[STORAGE_KEY.format(entry.entry_id)] == stored
 
 
 @pytest.mark.usefixtures("entry")
@@ -135,7 +177,7 @@ async def test_set_credential_without_name_keeps_existing(
     entry: MockConfigEntry,
     hass_storage: dict[str, Any],
 ) -> None:
-    """Test setting a PIN without a name keeps the existing label."""
+    """Test setting a PIN without a name replaces the PIN and keeps the slot's name."""
     await _call(
         hass,
         "set_lock_credential",
@@ -147,9 +189,7 @@ async def test_set_credential_without_name_keeps_existing(
         {"credential_data": "5678", "credential_index": 5},
     )
 
-    assert hass_storage[STORAGE_KEY.format(entry.entry_id)]["data"] == {
-        "names": {"5": "Guest"}
-    }
+    assert _stored_pins(hass_storage, entry) == {"5": {"pin": "5678", "name": "Guest"}}
 
 
 @pytest.mark.usefixtures("entry")
@@ -247,31 +287,32 @@ async def test_set_credential_errors(
 
 @pytest.mark.usefixtures("entry")
 @pytest.mark.parametrize(
-    ("error", "expected_name"),
+    ("error", "expected"),
     [
         pytest.param(
             KeycodeError("clear_keycode", OperationError.KEYCODE_NOSPACE),
-            "Guest",
+            GUEST,
             id="clear_failed",
         ),
         pytest.param(
             KeycodeError("commit_keycode", OperationError.KEYCODE_NOSPACE),
-            None,
+            {},
             id="commit_failed",
         ),
-        pytest.param(RuntimeError("not running"), "Guest", id="not_running"),
-        pytest.param(BleakError("gone"), None, id="bleak"),
+        pytest.param(RuntimeError("not running"), GUEST, id="not_running"),
+        pytest.param(BleakError("gone"), {}, id="bleak"),
     ],
 )
-async def test_failed_set_credential_name_handling(
+async def test_failed_set_credential_record_handling(
     hass: HomeAssistant,
     mock_lock: MockLock,
     entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
     error: Exception,
-    expected_name: str | None,
+    expected: dict[str, dict[str, str | None]],
 ) -> None:
-    """Test a failed set keeps the name only when the slot is unchanged."""
-    entry.runtime_data.credential_names._names["3"] = "Guest"
+    """Test a failed set keeps the slot's record only when the slot is unchanged."""
+    await _set_guest(hass)
     mock_lock.push_lock.set_keycode.side_effect = error
     with pytest.raises(HomeAssistantError):
         await _call(
@@ -279,7 +320,7 @@ async def test_failed_set_credential_name_handling(
             "set_lock_credential",
             {"credential_data": "1234", "credential_index": 3},
         )
-    assert entry.runtime_data.credential_names.get(3) == expected_name
+    assert _stored_pins(hass_storage, entry) == expected
 
 
 @pytest.mark.usefixtures("entry")
@@ -411,7 +452,7 @@ async def test_clear_credential_removes_name(
     await _call(hass, "clear_lock_credential", {"credential_index": 7})
 
     mock_lock.push_lock.clear_keycode.assert_awaited_once_with(7)
-    assert hass_storage[STORAGE_KEY.format(entry.entry_id)]["data"] == {"names": {}}
+    assert _stored_pins(hass_storage, entry) == {}
 
 
 @pytest.mark.usefixtures("entry")
@@ -495,13 +536,13 @@ async def test_services_require_admin(
         )
 
 
-async def test_unload_unregisters_and_remove_deletes_store(
+async def test_remove_deletes_store(
     hass: HomeAssistant,
     mock_lock: MockLock,
     entry: MockConfigEntry,
     hass_storage: dict[str, Any],
 ) -> None:
-    """Test unload unregisters the activity callback and removal deletes names."""
+    """Test removing the entry deletes its stored PINs."""
     await _call(
         hass,
         "set_lock_credential",
@@ -545,13 +586,14 @@ async def test_device_target_set_credential_runs_once(
     device_registry: dr.DeviceRegistry,
     mock_lock: MockLock,
     entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
 ) -> None:
     """Test targeting both lock entities sets the PIN and name once."""
     with patch.object(
-        CredentialNames,
+        PinStore,
         "async_set",
         autospec=True,
-        side_effect=CredentialNames.async_set,
+        side_effect=PinStore.async_set,
     ) as name_set:
         await _call_device(
             hass,
@@ -563,7 +605,7 @@ async def test_device_target_set_credential_runs_once(
 
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(5, "1234")
     assert name_set.await_count == 1
-    assert entry.runtime_data.credential_names.get(5) == "Jesse"
+    assert _stored_pins(hass_storage, entry) == {"5": {"pin": "1234", "name": "Jesse"}}
 
 
 async def test_device_target_clear_credential_runs_once(
@@ -574,10 +616,10 @@ async def test_device_target_clear_credential_runs_once(
 ) -> None:
     """Test targeting both lock entities clears the PIN and name once."""
     with patch.object(
-        CredentialNames,
+        PinStore,
         "async_remove",
         autospec=True,
-        side_effect=CredentialNames.async_remove,
+        side_effect=PinStore.async_remove,
     ) as name_remove:
         await _call_device(
             hass,
@@ -717,11 +759,14 @@ async def test_device_target_invalid_pin(
 
 
 @pytest.mark.usefixtures("entry")
-async def test_cancelled_set_credential_removes_name(
-    hass: HomeAssistant, mock_lock: MockLock, entry: MockConfigEntry
+async def test_cancelled_set_credential_removes_record(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
 ) -> None:
-    """Test cancelling a set after programming started drops the old name."""
-    entry.runtime_data.credential_names._names["3"] = "Guest"
+    """Test cancelling a set after programming started drops the slot's record."""
+    await _set_guest(hass)
     started = asyncio.Event()
 
     async def hang(slot: int, pin: str) -> None:
@@ -741,7 +786,7 @@ async def test_cancelled_set_credential_removes_name(
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert entry.runtime_data.credential_names.get(3) is None
+    assert _stored_pins(hass_storage, entry) == {}
 
 
 async def test_unload_waits_for_in_flight_name_save_before_removal(
@@ -786,11 +831,14 @@ async def test_unload_waits_for_in_flight_name_save_before_removal(
 
 
 @pytest.mark.usefixtures("entry")
-async def test_cancelled_clear_credential_removes_name(
-    hass: HomeAssistant, mock_lock: MockLock, entry: MockConfigEntry
+async def test_cancelled_clear_credential_removes_record(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
 ) -> None:
-    """Test cancelling a clear after it started drops the old name."""
-    entry.runtime_data.credential_names._names["3"] = "Guest"
+    """Test cancelling a clear after it started drops the slot's record."""
+    await _set_guest(hass)
     started = asyncio.Event()
 
     async def hang(slot: int) -> None:
@@ -806,32 +854,33 @@ async def test_cancelled_clear_credential_removes_name(
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    assert entry.runtime_data.credential_names.get(3) is None
+    assert _stored_pins(hass_storage, entry) == {}
 
 
 @pytest.mark.usefixtures("entry")
 @pytest.mark.parametrize(
-    ("error", "expected_name"),
+    ("error", "expected"),
     [
         pytest.param(
             KeycodeError("clear_keycode", OperationError.KEYCODE_NOSPACE),
-            "Guest",
+            GUEST,
             id="clear_failed",
         ),
-        pytest.param(RuntimeError("not running"), "Guest", id="not_running"),
-        pytest.param(BleakError("gone"), None, id="bleak"),
+        pytest.param(RuntimeError("not running"), GUEST, id="not_running"),
+        pytest.param(BleakError("gone"), {}, id="bleak"),
     ],
 )
-async def test_failed_clear_credential_name_handling(
+async def test_failed_clear_credential_record_handling(
     hass: HomeAssistant,
     mock_lock: MockLock,
     entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
     error: Exception,
-    expected_name: str | None,
+    expected: dict[str, dict[str, str | None]],
 ) -> None:
-    """Test a failed clear keeps the name only when the slot is unchanged."""
-    entry.runtime_data.credential_names._names["3"] = "Guest"
+    """Test a failed clear keeps the slot's record only when the slot is unchanged."""
+    await _set_guest(hass)
     mock_lock.push_lock.clear_keycode.side_effect = error
     with pytest.raises(HomeAssistantError):
         await _call(hass, "clear_lock_credential", {"credential_index": 3})
-    assert entry.runtime_data.credential_names.get(3) == expected_name
+    assert _stored_pins(hass_storage, entry) == expected

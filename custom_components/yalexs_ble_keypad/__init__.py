@@ -11,7 +11,7 @@ from homeassistant.helpers.typing import ConfigType
 from .const import DOMAIN, OWNER_DOMAIN
 from .models import YaleXSBLEKeypadConfigEntry, YaleXSBLEKeypadData
 from .services import async_setup_services
-from .store import CredentialNames, async_remove_credential_names
+from .store import PinStore, async_remove_pin_store
 
 if TYPE_CHECKING:
     from homeassistant.components.yalexs_ble import YALEXSBLEConfigEntry
@@ -43,13 +43,13 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="owner_not_loaded"
         )
-    credential_names = CredentialNames(hass, entry)
-    await credential_names.async_load()
+    pins = PinStore(hass, entry)
+    await pins.async_load()
     entry.runtime_data = YaleXSBLEKeypadData(
         title=owner.title,
         address=address,
         lock=owner.runtime_data.lock,
-        credential_names=credential_names,
+        pins=pins,
     )
 
     reload_scheduled = False
@@ -80,4 +80,4 @@ async def async_remove_entry(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry
 ) -> None:
     """Remove stored data when the config entry is removed."""
-    await async_remove_credential_names(hass, entry.entry_id)
+    await async_remove_pin_store(hass, entry.entry_id)

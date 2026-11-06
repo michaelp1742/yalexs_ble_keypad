@@ -6,17 +6,17 @@ from yalexs_ble import PushLock
 
 from homeassistant.config_entries import ConfigEntry
 
-from .store import CredentialNames
+from .store import PinStore
 
 
 @dataclass(kw_only=True)
 class YaleXSBLEKeypadData:
-    """The runtime data of an entry: its title, its address, and core's PushLock for the lock."""
+    """The runtime data of an entry: its title, its address, core's PushLock for the lock, and its PIN store."""
 
     title: str
     address: str
     lock: PushLock
-    credential_names: CredentialNames
+    pins: PinStore
 
 
 type YaleXSBLEKeypadConfigEntry = ConfigEntry[YaleXSBLEKeypadData]

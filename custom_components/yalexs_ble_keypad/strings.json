@@ -89,7 +89,7 @@
           "name": "Credential type"
         },
         "name": {
-          "description": "A label for the slot, used as the changed by value when the PIN is used. Leave empty to keep the existing label.",
+          "description": "A label for the slot. Leave empty to keep the existing label.",
           "name": "Name"
         }
       },
