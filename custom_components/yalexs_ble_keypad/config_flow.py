@@ -23,6 +23,7 @@ from . import async_loaded_owners
 from .const import (
     CONF_CLOUD_PIN_RULES,
     CONF_OCCUPANCY_CLOUD_PINS,
+    CONF_OCCUPANCY_READ,
     CONF_SLOT_FIELD_WIDTH,
     CONF_SLOT_RANGE_SOURCE,
     CONF_STATUS_RESULT,
@@ -127,6 +128,9 @@ class OptionsFlowHandler(OptionsFlowWithReload):
                     probatio.Required(
                         CONF_OCCUPANCY_CLOUD_PINS,
                         default=options[CONF_OCCUPANCY_CLOUD_PINS],
+                    ): bool,
+                    probatio.Required(
+                        CONF_OCCUPANCY_READ, default=options[CONF_OCCUPANCY_READ]
                     ): bool,
                 }
             ),

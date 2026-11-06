@@ -33,6 +33,7 @@ from homeassistant.helpers.target import (
 from .cloud import CloudPin, LockPinParameters, lock_pin_parameters
 from .const import (
     CONF_OCCUPANCY_CLOUD_PINS,
+    CONF_OCCUPANCY_READ,
     CONF_SLOT_FIELD_WIDTH,
     CONF_STATUS_RESULT,
     CREDENTIAL_TYPE_PIN,
@@ -269,6 +270,15 @@ async def _async_set_credential(
             translation_key="slot_in_use",
             translation_placeholders={"slot": str(slot)},
         )
+    if options[CONF_OCCUPANCY_READ] and pins.get(slot) is None:
+        with _translate_keycode_errors():
+            occupied = await entry.runtime_data.lock.get_keycode(slot) is not None
+        if occupied:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="slot_not_empty",
+                translation_placeholders={"slot": str(slot)},
+            )
     try:
         with _translate_keycode_errors():
             await entry.runtime_data.lock.set_keycode(slot, pin)

@@ -1101,3 +1101,44 @@ async def test_occupancy_cloud_pins_refuses_a_slot_in_the_pins_block(
     assert exc_info.value.translation_key == "slot_in_use"
     assert exc_info.value.translation_placeholders == {"slot": "100"}
     mock_lock.push_lock.set_keycode.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", [{"occupancy_read": True}])
+async def test_occupancy_read_refuses_a_slot_that_holds_a_pin(
+    hass: HomeAssistant, mock_lock: MockLock
+) -> None:
+    """With the read before a set on, a set at a slot the store does not hold is refused when the lock answers with a PIN, after one read and no write."""
+    mock_lock.push_lock.get_keycode.return_value = "975310"
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await _call(
+            hass,
+            "set_lock_credential",
+            {"credential_data": "1234", "credential_index": 12},
+        )
+    assert exc_info.value.translation_key == "slot_not_empty"
+    assert exc_info.value.translation_placeholders == {"slot": "12"}
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(12)
+    mock_lock.push_lock.set_keycode.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", [{"occupancy_read": True}])
+async def test_occupancy_read_reads_an_empty_slot_and_skips_a_kept_slot(
+    hass: HomeAssistant, mock_lock: MockLock
+) -> None:
+    """With the read before a set on, a set at an empty slot is read then written, and a second set at that slot, now in the store, is written with no read."""
+    await _set_guest(hass)
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(3, "4321")
+    mock_lock.push_lock.get_keycode.reset_mock()
+    mock_lock.push_lock.set_keycode.reset_mock()
+
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "8765", "credential_index": 3},
+    )
+    mock_lock.push_lock.get_keycode.assert_not_awaited()
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(3, "8765")
