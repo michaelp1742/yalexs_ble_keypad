@@ -2,8 +2,11 @@
 
 from typing import Any
 
+import pytest
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
 from custom_components.yalexs_ble_keypad.const import DOMAIN
-from homeassistant.config_entries import SOURCE_USER
+from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -36,7 +39,7 @@ async def test_user_flow_adds_each_loaded_lock_once(hass: HomeAssistant) -> None
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == TITLE
     assert result["data"] == {CONF_ADDRESS: ADDRESS}
-    assert result["options"] == {}
+    assert result["options"] == {"cloud_pin_rules": False}
     assert result["result"].unique_id == ADDRESS
 
     result = await hass.config_entries.flow.async_init(
@@ -54,3 +57,26 @@ async def test_user_flow_adds_each_loaded_lock_once(hass: HomeAssistant) -> None
     )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "no_locks"
+
+
+@pytest.mark.usefixtures("owner_entry")
+async def test_options_flow_stores_the_switches_and_reloads(
+    hass: HomeAssistant, config_entry: MockConfigEntry
+) -> None:
+    """The options form offers each switch at its off value, and a submit stores the switches and reloads the entry."""
+    assert await hass.config_entries.async_setup(config_entry.entry_id)
+    runtime_data = config_entry.runtime_data
+    switches = {"cloud_pin_rules": True}
+
+    result = await hass.config_entries.options.async_init(config_entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert result["data_schema"]({}) == {"cloud_pin_rules": False}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], switches
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert config_entry.options == switches
+    assert config_entry.state is ConfigEntryState.LOADED
+    assert config_entry.runtime_data is not runtime_data

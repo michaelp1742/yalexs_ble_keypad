@@ -1,11 +1,13 @@
 """Models for the Yale Access Bluetooth Keypad integration."""
 
 from dataclasses import dataclass
+from typing import Any
 
 from yalexs_ble import PushLock
 
 from homeassistant.config_entries import ConfigEntry
 
+from .const import DEFAULT_OPTIONS
 from .store import PinStore
 
 
@@ -20,3 +22,8 @@ class YaleXSBLEKeypadData:
 
 
 type YaleXSBLEKeypadConfigEntry = ConfigEntry[YaleXSBLEKeypadData]
+
+
+def entry_options(entry: ConfigEntry) -> dict[str, Any]:
+    """Return the entry's options, with each option the entry does not hold at its off value."""
+    return {**DEFAULT_OPTIONS, **entry.options}

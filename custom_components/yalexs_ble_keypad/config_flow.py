@@ -4,8 +4,14 @@ from typing import Any, override
 
 import probatio
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_ADDRESS
+from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     SelectOptionDict,
     SelectSelector,
@@ -13,7 +19,8 @@ from homeassistant.helpers.selector import (
 )
 
 from . import async_loaded_owners
-from .const import DOMAIN
+from .const import CONF_CLOUD_PIN_RULES, DEFAULT_OPTIONS, DOMAIN
+from .models import entry_options
 
 
 class YaleXSBLEKeypadConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -35,7 +42,9 @@ class YaleXSBLEKeypadConfigFlow(ConfigFlow, domain=DOMAIN):
             await self.async_set_unique_id(address)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
-                title=self._titles[address], data={CONF_ADDRESS: address}
+                title=self._titles[address],
+                data={CONF_ADDRESS: address},
+                options=DEFAULT_OPTIONS,
             )
 
         current_addresses = self._async_current_ids()
@@ -59,6 +68,36 @@ class YaleXSBLEKeypadConfigFlow(ConfigFlow, domain=DOMAIN):
                             ]
                         )
                     )
+                }
+            ),
+        )
+
+    @staticmethod
+    @callback
+    @override
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlowHandler:
+        """Get the options flow for this handler."""
+        return OptionsFlowHandler()
+
+
+class OptionsFlowHandler(OptionsFlowWithReload):
+    """Handle the Yale Access Bluetooth Keypad options."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage the entry's options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        options = entry_options(self.config_entry)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=probatio.Schema(
+                {
+                    probatio.Required(
+                        CONF_CLOUD_PIN_RULES, default=options[CONF_CLOUD_PIN_RULES]
+                    ): bool,
                 }
             ),
         )

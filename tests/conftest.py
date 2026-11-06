@@ -56,7 +56,7 @@ def mock_owner_integration(hass: HomeAssistant) -> Iterator[None]:
 
 async def _async_setup_cloud_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Load the yale entry with the cloud records its data holds."""
-    entry.runtime_data = YaleData(entry.data["records"])
+    entry.runtime_data = YaleData(entry.data["records"], entry.data["capabilities"])
     return True
 
 

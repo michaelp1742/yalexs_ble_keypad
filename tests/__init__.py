@@ -47,12 +47,18 @@ async def async_setup_owner(
 class YaleData:
     """Stand in for the yale entry's runtime data: a LockDetail per record, and a yalexs Lock for each on every read of locks."""
 
-    def __init__(self, records: list[dict[str, Any]]) -> None:
-        """Hold a LockDetail for each record, by device id."""
+    def __init__(
+        self,
+        records: list[dict[str, Any]],
+        capabilities: dict[str, dict[str, Any]],
+    ) -> None:
+        """Hold a LockDetail for each record by device id, with the capabilities given for its lock id."""
         self._details = {
             detail.device_id: detail
             for detail in (LockDetail(record) for record in records)
         }
+        for lock_id, lock_capabilities in capabilities.items():
+            self._details[lock_id].set_capabilities(lock_capabilities)
 
     @property
     def locks(self) -> list[Lock]:
@@ -90,10 +96,15 @@ def cloud_record(lock_id: str, address: str, **fields: Any) -> dict[str, Any]:
 
 
 async def async_setup_cloud(
-    hass: HomeAssistant, records: list[dict[str, Any]]
+    hass: HomeAssistant,
+    records: list[dict[str, Any]],
+    capabilities: dict[str, dict[str, Any]] | None = None,
 ) -> MockConfigEntry:
-    """Add and load a yale entry that holds the cloud records."""
-    entry = MockConfigEntry(domain=CLOUD_DOMAIN, data={"records": records})
+    """Add and load a yale entry that holds the cloud records, and the capabilities by lock id."""
+    entry = MockConfigEntry(
+        domain=CLOUD_DOMAIN,
+        data={"records": records, "capabilities": capabilities or {}},
+    )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     return entry

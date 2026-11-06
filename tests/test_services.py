@@ -28,12 +28,25 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 
-from . import ADDRESS, TITLE, async_setup_owner
+from . import ADDRESS, TITLE, async_setup_cloud, async_setup_owner, cloud_record
 
 ENTITY_ID = "lock.front_door"
 SECURE_ENTITY_ID = "lock.front_door_secure_mode"
 STORAGE_KEY = "yalexs_ble_keypad.{}.pins"
 GUEST = {"3": {"pin": "4321", "name": "Guest"}}
+
+# A constructed cloud record of the Front Door with a keypad block, and the capabilities a test reads for it.
+FRONT_DOOR_RECORD = cloud_record(
+    "front",
+    ADDRESS,
+    keypad={
+        "_id": "keypad",
+        "serialNumber": "keypad-serial",
+        "currentFirmwareVersion": "1.0.0",
+        "batteryLevel": "Full",
+    },
+)
+FRONT_DOOR_CAPABILITIES = {"lock": {"pinLength": 6, "masterPinSlot": 65518}}
 
 
 class MockLock:
@@ -55,11 +68,18 @@ def mock_lock() -> MockLock:
 
 
 @pytest.fixture
+def options() -> dict[str, Any]:
+    """Return the keypad entry's options: none, so every switch is off."""
+    return {}
+
+
+@pytest.fixture
 async def entry(
     hass: HomeAssistant,
     device_registry: dr.DeviceRegistry,
     entity_registry: er.EntityRegistry,
     mock_lock: MockLock,
+    options: dict[str, Any],
 ) -> MockConfigEntry:
     """Set up a keypad entry on core's entry with a mocked lock and its two lock entities."""
     owner = await async_setup_owner(hass)
@@ -84,6 +104,7 @@ async def entry(
         domain=DOMAIN,
         title=TITLE,
         data={CONF_ADDRESS: ADDRESS},
+        options=options,
         unique_id=ADDRESS,
     )
     config_entry.add_to_hass(hass)
@@ -884,3 +905,29 @@ async def test_failed_clear_credential_record_handling(
     with pytest.raises(HomeAssistantError):
         await _call(hass, "clear_lock_credential", {"credential_index": 3})
     assert _stored_pins(hass_storage, entry) == expected
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", [{"cloud_pin_rules": True}])
+async def test_cloud_pin_rules_check_the_pin_length_from_the_record(
+    hass: HomeAssistant, mock_lock: MockLock
+) -> None:
+    """With the cloud PIN rules on, a PIN of a length other than the record's is refused and one of its length is sent."""
+    await async_setup_cloud(
+        hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
+    )
+
+    with pytest.raises(ServiceValidationError, match="The PIN must be 6 digits"):
+        await _call(
+            hass,
+            "set_lock_credential",
+            {"credential_data": "12345", "credential_index": 12},
+        )
+    mock_lock.push_lock.set_keycode.assert_not_awaited()
+
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "123456", "credential_index": 12},
+    )
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(12, "123456")

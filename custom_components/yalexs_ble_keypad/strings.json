@@ -17,7 +17,10 @@
       "message": "Failed to communicate with the lock."
     },
     "invalid_pin": {
-      "message": "The PIN must be 4 to 8 digits."
+      "message": "The PIN must be {min} to {max} digits."
+    },
+    "invalid_pin_length": {
+      "message": "The PIN must be {length} digits."
     },
     "invalid_response": {
       "message": "The lock returned an invalid response."
@@ -43,6 +46,12 @@
     "lock_not_running": {
       "message": "The lock connection is not running."
     },
+    "master_code_slot": {
+      "message": "Slot {slot} is the master code's slot in the lock's cloud record, which the set and clear actions do not write or clear. Nothing was sent to the lock."
+    },
+    "no_keypad": {
+      "message": "The lock's cloud record shows no keypad. Nothing was sent to the lock."
+    },
     "no_lock_targeted": {
       "message": "The action targets no Yale Access Bluetooth lock."
     },
@@ -54,6 +63,18 @@
     },
     "pin_in_use": {
       "message": "This PIN is already assigned to slot {slot}. Nothing was sent to the lock."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "cloud_pin_rules": "PIN rules from the cloud record"
+        },
+        "data_description": {
+          "cloud_pin_rules": "Checks the PIN length against the lock's cloud record, refuses every action when the record shows no keypad, and refuses a set or clear at the master code's slot the record names. When no loaded Yale Home integration holds the lock's record with its capabilities, the PIN is 4 to 8 digits and every action is offered."
+        }
+      }
     }
   },
   "services": {
@@ -89,7 +110,7 @@
       "description": "Sets a keypad PIN in a slot on the lock.",
       "fields": {
         "credential_data": {
-          "description": "The PIN, 4 to 8 digits.",
+          "description": "The PIN, in digits.",
           "name": "Credential data"
         },
         "credential_index": {

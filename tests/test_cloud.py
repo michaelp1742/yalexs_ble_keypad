@@ -9,6 +9,7 @@ from custom_components.yalexs_ble_keypad.cloud import (
     LockPinParameters,
     lock_pin_parameters,
 )
+from custom_components.yalexs_ble_keypad.const import DEFAULT_OPTIONS
 from homeassistant.core import HomeAssistant
 
 from . import ADDRESS, BACK_ADDRESS, async_setup_cloud, cloud_record
@@ -25,17 +26,31 @@ FRONT_DOOR_PINS = {
 }
 
 
+def _parameters(
+    *, record_read: bool, cloud_pins: tuple[CloudPin, ...] = ()
+) -> LockPinParameters:
+    """Return the PIN parameters with every switch off."""
+    return LockPinParameters(
+        record_read=record_read,
+        has_keypad=None,
+        pin_length_min=4,
+        pin_length_max=8,
+        master_pin_slot=0xFFEE,
+        cloud_pins=cloud_pins,
+    )
+
+
 @pytest.mark.parametrize(
     ("cloud_entries", "expected"),
     [
         pytest.param(
             [],
-            LockPinParameters(record_read=False, cloud_pins=()),
+            _parameters(record_read=False),
             id="no_yale_entry",
         ),
         pytest.param(
             [[cloud_record("back", BACK_ADDRESS)]],
-            LockPinParameters(record_read=False, cloud_pins=()),
+            _parameters(record_read=False),
             id="other_lock",
         ),
         pytest.param(
@@ -45,7 +60,7 @@ FRONT_DOOR_PINS = {
                     cloud_record("front", ADDRESS.lower(), pins=FRONT_DOOR_PINS),
                 ]
             ],
-            LockPinParameters(
+            _parameters(
                 record_read=True,
                 cloud_pins=(
                     CloudPin(slot=1, pin="135790", state="loaded"),
@@ -56,7 +71,7 @@ FRONT_DOOR_PINS = {
         ),
         pytest.param(
             [[cloud_record("front", ADDRESS)]],
-            LockPinParameters(record_read=True, cloud_pins=()),
+            _parameters(record_read=True),
             id="lock_without_pins",
         ),
     ],
@@ -70,4 +85,4 @@ async def test_lock_pin_parameters_from_yale_entry(
     for records in cloud_entries:
         await async_setup_cloud(hass, records)
 
-    assert lock_pin_parameters(hass, ADDRESS) == expected
+    assert lock_pin_parameters(hass, ADDRESS, DEFAULT_OPTIONS) == expected

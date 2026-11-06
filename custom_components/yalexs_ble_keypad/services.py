@@ -30,7 +30,7 @@ from homeassistant.helpers.target import (
     async_extract_referenced_entity_ids,
 )
 
-from .cloud import CloudPin, lock_pin_parameters
+from .cloud import CloudPin, LockPinParameters, lock_pin_parameters
 from .const import (
     CREDENTIAL_TYPE_PIN,
     DOMAIN,
@@ -42,7 +42,7 @@ from .const import (
     YaleXSBLEKeypadService,
     YaleXSBLEKeypadServiceArgument,
 )
-from .models import YaleXSBLEKeypadConfigEntry
+from .models import YaleXSBLEKeypadConfigEntry, entry_options
 from .store import StoredPin
 
 _LOGGER = logging.getLogger(__name__)
@@ -161,6 +161,14 @@ def _async_target_entries(
     return targets
 
 
+def _check_keypad(parameters: LockPinParameters) -> None:
+    """Raise when the lock's cloud record shows no keypad."""
+    if parameters.has_keypad is False:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="no_keypad"
+        )
+
+
 def _check_slot(slot: int) -> None:
     """Raise when the slot is outside the range of PIN slots."""
     if not MIN_PIN_SLOT <= slot <= MAX_PIN_SLOT:
@@ -172,6 +180,39 @@ def _check_slot(slot: int) -> None:
                 "max": str(MAX_PIN_SLOT),
             },
         )
+
+
+def _check_not_master_code_slot(slot: int, parameters: LockPinParameters) -> None:
+    """Raise when the slot is the master code's, which the set and clear actions do not write or clear."""
+    if slot == parameters.master_pin_slot:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="master_code_slot",
+            translation_placeholders={"slot": str(slot)},
+        )
+
+
+def _check_pin(pin: str, parameters: LockPinParameters) -> None:
+    """Raise when the PIN is not all digits, or its length is outside the parameters' range."""
+    if (
+        PIN_PATTERN.fullmatch(pin)
+        and parameters.pin_length_min <= len(pin) <= parameters.pin_length_max
+    ):
+        return
+    if parameters.pin_length_min == parameters.pin_length_max:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_pin_length",
+            translation_placeholders={"length": str(parameters.pin_length_min)},
+        )
+    raise ServiceValidationError(
+        translation_domain=DOMAIN,
+        translation_key="invalid_pin",
+        translation_placeholders={
+            "min": str(parameters.pin_length_min),
+            "max": str(parameters.pin_length_max),
+        },
+    )
 
 
 def _slot_holding_pin(
@@ -194,15 +235,16 @@ async def _async_set_credential(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> None:
     """Set a keypad PIN on the entry's lock."""
+    parameters = lock_pin_parameters(
+        hass, entry.runtime_data.address, entry_options(entry)
+    )
+    _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot)
+    _check_not_master_code_slot(slot, parameters)
     pin: str = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_DATA]
-    if not PIN_PATTERN.fullmatch(pin):
-        raise ServiceValidationError(
-            translation_domain=DOMAIN, translation_key="invalid_pin"
-        )
+    _check_pin(pin, parameters)
     pins = entry.runtime_data.pins
-    parameters = lock_pin_parameters(hass, entry.runtime_data.address)
     if (
         used_slot := _slot_holding_pin(pin, slot, pins.pins(), parameters.cloud_pins)
     ) is not None:
@@ -230,11 +272,16 @@ async def _async_set_credential(
 
 
 async def _async_clear_credential(
-    entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
+    hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> None:
     """Clear a keypad PIN on the entry's lock."""
+    parameters = lock_pin_parameters(
+        hass, entry.runtime_data.address, entry_options(entry)
+    )
+    _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot)
+    _check_not_master_code_slot(slot, parameters)
     pins = entry.runtime_data.pins
     try:
         with _translate_keycode_errors():
@@ -251,9 +298,12 @@ async def _async_clear_credential(
 
 
 async def _async_credential_status(
-    entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
+    hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> dict[str, bool | str | None]:
     """Read a keypad PIN slot from the entry's lock."""
+    _check_keypad(
+        lock_pin_parameters(hass, entry.runtime_data.address, entry_options(entry))
+    )
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot)
     with _translate_keycode_errors():
@@ -279,7 +329,7 @@ async def async_clear_lock_credential(call: ServiceCall) -> None:
     hass = call.hass
     for entry_id in _async_target_entries(hass, call):
         await _async_clear_credential(
-            hass.config_entries.async_get_known_entry(entry_id), call.data
+            hass, hass.config_entries.async_get_known_entry(entry_id), call.data
         )
 
 
@@ -289,7 +339,7 @@ async def async_get_lock_credential_status(call: ServiceCall) -> ServiceResponse
     response: dict[str, Any] = {}
     for entry_id, entity_ids in _async_target_entries(hass, call).items():
         status = await _async_credential_status(
-            hass.config_entries.async_get_known_entry(entry_id), call.data
+            hass, hass.config_entries.async_get_known_entry(entry_id), call.data
         )
         response.update(dict.fromkeys(entity_ids, status))
     return response
