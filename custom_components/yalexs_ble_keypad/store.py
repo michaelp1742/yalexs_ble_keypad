@@ -1,6 +1,7 @@
 """Storage for the keypad PINs the integration writes, each with its name."""
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TypedDict
 
@@ -56,6 +57,10 @@ class PinStore:
     def get(self, slot: int) -> StoredPin | None:
         """Return the PIN and name of a slot."""
         return self._pins.get(slot)
+
+    def pins(self) -> Mapping[int, StoredPin]:
+        """Return the PIN and name of every slot."""
+        return self._pins
 
     async def async_set(self, slot: int, stored: StoredPin) -> None:
         """Set the PIN and name of a slot."""

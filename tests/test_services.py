@@ -666,16 +666,16 @@ async def test_parallel_set_credential_different_slots_both_run(
             _call(
                 hass,
                 "set_lock_credential",
-                {"credential_data": "1234", "credential_index": slot},
+                {"credential_data": pin, "credential_index": slot},
                 context=context,
             )
-            for slot in (1, 2)
+            for slot, pin in ((1, "1234"), (2, "5678"))
         )
     )
 
     assert sorted(c.args for c in mock_lock.push_lock.set_keycode.await_args_list) == [
         (1, "1234"),
-        (2, "1234"),
+        (2, "5678"),
     ]
 
 

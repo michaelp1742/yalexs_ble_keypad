@@ -5,6 +5,7 @@ import re
 
 DOMAIN = "yalexs_ble_keypad"
 OWNER_DOMAIN = "yalexs_ble"
+CLOUD_DOMAIN = "yale"
 
 
 class YaleXSBLEKeypadService(StrEnum):

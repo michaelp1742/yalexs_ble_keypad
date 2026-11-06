@@ -30,6 +30,7 @@ from homeassistant.helpers.target import (
     async_extract_referenced_entity_ids,
 )
 
+from .cloud import CloudPin, lock_pin_parameters
 from .const import (
     CREDENTIAL_TYPE_PIN,
     DOMAIN,
@@ -152,8 +153,24 @@ def _check_slot(slot: int) -> None:
         )
 
 
+def _slot_holding_pin(
+    pin: str,
+    slot: int,
+    kept_pins: Mapping[int, StoredPin],
+    cloud_pins: tuple[CloudPin, ...],
+) -> int | None:
+    """Return the slot that holds the PIN: a stored slot other than the target, or any slot of the cloud record."""
+    for kept_slot, stored in kept_pins.items():
+        if kept_slot != slot and stored.pin == pin:
+            return kept_slot
+    for cloud_pin in cloud_pins:
+        if cloud_pin.pin == pin:
+            return cloud_pin.slot
+    return None
+
+
 async def _async_set_credential(
-    entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
+    hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> None:
     """Set a keypad PIN on the entry's lock."""
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
@@ -164,6 +181,15 @@ async def _async_set_credential(
             translation_domain=DOMAIN, translation_key="invalid_pin"
         )
     pins = entry.runtime_data.pins
+    parameters = lock_pin_parameters(hass, entry.runtime_data.address)
+    if (
+        used_slot := _slot_holding_pin(pin, slot, pins.pins(), parameters.cloud_pins)
+    ) is not None:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="pin_in_use",
+            translation_placeholders={"slot": str(used_slot)},
+        )
     try:
         with _translate_keycode_errors():
             await entry.runtime_data.lock.set_keycode(slot, pin)
@@ -223,7 +249,7 @@ async def async_set_lock_credential(call: ServiceCall) -> None:
     hass = call.hass
     for entry_id in _async_target_entries(hass, call):
         await _async_set_credential(
-            hass.config_entries.async_get_known_entry(entry_id), call.data
+            hass, hass.config_entries.async_get_known_entry(entry_id), call.data
         )
 
 
