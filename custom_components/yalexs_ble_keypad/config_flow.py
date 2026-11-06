@@ -24,6 +24,7 @@ from .const import (
     CONF_CLOUD_PIN_RULES,
     CONF_SLOT_FIELD_WIDTH,
     CONF_SLOT_RANGE_SOURCE,
+    CONF_STATUS_RESULT,
     DEFAULT_OPTIONS,
     DOMAIN,
     SLOT_RANGE_CLOUD,
@@ -118,6 +119,9 @@ class OptionsFlowHandler(OptionsFlowWithReload):
                     ),
                     probatio.Required(
                         CONF_SLOT_FIELD_WIDTH, default=options[CONF_SLOT_FIELD_WIDTH]
+                    ): bool,
+                    probatio.Required(
+                        CONF_STATUS_RESULT, default=options[CONF_STATUS_RESULT]
                     ): bool,
                 }
             ),

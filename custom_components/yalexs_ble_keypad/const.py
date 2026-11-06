@@ -49,6 +49,7 @@ DEFAULT_PIN_LENGTH = 5
 CONF_CLOUD_PIN_RULES = "cloud_pin_rules"
 CONF_SLOT_RANGE_SOURCE = "slot_range_source"
 CONF_SLOT_FIELD_WIDTH = "slot_field_width"
+CONF_STATUS_RESULT = "status_result"
 
 SLOT_RANGE_CONSTANTS = "constants"
 SLOT_RANGE_CLOUD = "cloud"
@@ -57,4 +58,5 @@ DEFAULT_OPTIONS: Final[dict[str, Any]] = {
     CONF_CLOUD_PIN_RULES: False,
     CONF_SLOT_RANGE_SOURCE: SLOT_RANGE_CONSTANTS,
     CONF_SLOT_FIELD_WIDTH: False,
+    CONF_STATUS_RESULT: False,
 }

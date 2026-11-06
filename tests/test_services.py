@@ -1020,3 +1020,56 @@ async def test_field_width_lets_the_status_read_past_the_range(
 
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(slot)
     assert response == {ENTITY_ID: {"credential_exists": False, "name": None}}
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", [{"status_result": True}])
+@pytest.mark.parametrize(
+    ("side_effect", "expected"),
+    [
+        pytest.param(
+            ["4321"],
+            {"credential_exists": True, "name": "Guest", "result": "pin"},
+            id="pin",
+        ),
+        pytest.param(
+            [None],
+            {"credential_exists": False, "name": None, "result": "empty"},
+            id="empty",
+        ),
+        pytest.param(
+            KeycodeError("get_keycode", OperationError.KEYCODE_NOSPACE),
+            {"credential_exists": None, "name": None, "result": "KEYCODE_NOSPACE"},
+            id="refusal",
+        ),
+        pytest.param(
+            ValueError("Malformed PIN field"),
+            {"credential_exists": None, "name": None, "result": "malformed"},
+            id="malformed",
+        ),
+        pytest.param(
+            TimeoutError("The lock did not answer get_keycode"),
+            {"credential_exists": None, "name": None, "result": "timeout"},
+            id="timeout",
+        ),
+    ],
+)
+async def test_status_result_returns_the_slots_result_without_raising(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    side_effect: Any,
+    expected: dict[str, bool | str | None],
+) -> None:
+    """With the status answer on, the status action returns the slot's result and raises no error for a refusal, a malformed PIN field, or no answer."""
+    await _set_guest(hass)
+    mock_lock.push_lock.get_keycode.side_effect = side_effect
+
+    response = await _call(
+        hass,
+        "get_lock_credential_status",
+        {"credential_index": 3},
+        return_response=True,
+    )
+
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
+    assert response == {ENTITY_ID: expected}

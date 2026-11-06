@@ -33,6 +33,7 @@ from homeassistant.helpers.target import (
 from .cloud import CloudPin, LockPinParameters, lock_pin_parameters
 from .const import (
     CONF_SLOT_FIELD_WIDTH,
+    CONF_STATUS_RESULT,
     CREDENTIAL_TYPE_PIN,
     DOMAIN,
     MAX_SLOT,
@@ -308,12 +309,47 @@ async def _async_credential_status(
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot, parameters, options)
+    if options[CONF_STATUS_RESULT]:
+        return await _async_slot_result(entry, slot)
     with _translate_keycode_errors():
         exists = await entry.runtime_data.lock.get_keycode(slot) is not None
     stored = entry.runtime_data.pins.get(slot) if exists else None
     return {
         "credential_exists": exists,
         "name": stored.name if stored else None,
+    }
+
+
+async def _async_slot_result(
+    entry: YaleXSBLEKeypadConfigEntry, slot: int
+) -> dict[str, bool | str | None]:
+    """Read a keypad PIN slot and return its result.
+
+    A refusal, a malformed PIN field, or no answer is a result, not an error.
+    """
+    exists: bool | None = None
+    with _translate_keycode_errors():
+        try:
+            pin = await entry.runtime_data.lock.get_keycode(slot)
+        except KeycodeError as err:
+            result = (
+                err.error.name
+                if isinstance(err.error, OperationError)
+                else f"0x{err.error:02X}"
+            )
+        except ValueError:
+            result = "malformed"
+        except TimeoutError:
+            result = "timeout"
+        else:
+            exists = pin is not None
+            result = "pin" if exists else "empty"
+    _LOGGER.debug("Status read of slot %s: %s", slot, result)
+    stored = entry.runtime_data.pins.get(slot) if exists else None
+    return {
+        "credential_exists": exists,
+        "name": stored.name if stored else None,
+        "result": result,
     }
 
 
