@@ -1,0 +1,13 @@
+{
+  "domain": "yalexs_ble_keypad",
+  "name": "Yale Access Bluetooth Keypad",
+  "codeowners": ["@michaelp1742"],
+  "config_flow": true,
+  "dependencies": ["yalexs_ble"],
+  "documentation": "https://github.com/Michaelp1742/yalexs_ble_keypad",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/Michaelp1742/yalexs_ble_keypad/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

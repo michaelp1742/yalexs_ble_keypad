@@ -1,0 +1,6 @@
+pytest-homeassistant-custom-component==0.13.375
+# Installs yalexs-ble's local-build branch at this commit from the local clone,
+# so the requirement resolves only on this machine.
+yalexs-ble @ git+file:///home/michael/projects/home-assistant/yalexs-ble@e9fad46a79320731f7c61a89a6a036bdfc94d7eb
+mypy==2.4.0
+pre-commit==4.2.0

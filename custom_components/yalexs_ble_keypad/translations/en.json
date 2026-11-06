@@ -1,0 +1,20 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "This lock already has a Yale Access Bluetooth Keypad entry.",
+      "no_locks": "No lock is available. A lock is listed when Yale Access Bluetooth has loaded it and it has no Yale Access Bluetooth Keypad entry yet."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "address": "Lock"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "owner_not_loaded": {
+      "message": "Yale Access Bluetooth has not loaded this lock"
+    }
+  }
+}
