@@ -959,3 +959,64 @@ async def test_cloud_slot_range_from_the_record(
             {"credential_data": "5678", "credential_index": 101},
         )
     mock_lock.push_lock.set_keycode.assert_awaited_once()
+
+
+# The master code's slot is 65518 both as the fallback and in the Front Door's record.
+FIELD_WIDTH_OPTIONS = [
+    pytest.param({"slot_field_width": True}, id="fallback_master_slot"),
+    pytest.param(
+        {"slot_field_width": True, "cloud_pin_rules": True}, id="record_master_slot"
+    ),
+]
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", FIELD_WIDTH_OPTIONS)
+@pytest.mark.parametrize(
+    ("slot", "key"),
+    [
+        pytest.param(0, "invalid_slot", id="slot_0"),
+        pytest.param(65518, "master_code_slot", id="master_slot"),
+    ],
+)
+async def test_field_width_refuses_slot_0_and_a_set_at_the_master_slot(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    slot: int,
+    key: str,
+) -> None:
+    """With the slot field width option on, a set at slot 0 or at the master code's slot is refused before any frame."""
+    await async_setup_cloud(
+        hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
+    )
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await _call(
+            hass,
+            "set_lock_credential",
+            {"credential_data": "123456", "credential_index": slot},
+        )
+    assert exc_info.value.translation_key == key
+    mock_lock.push_lock.set_keycode.assert_not_awaited()
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", FIELD_WIDTH_OPTIONS)
+@pytest.mark.parametrize("slot", [255, 65518])
+async def test_field_width_lets_the_status_read_past_the_range(
+    hass: HomeAssistant, mock_lock: MockLock, slot: int
+) -> None:
+    """With the slot field width option on, the status action reads a slot past the lock's range and the master code's slot."""
+    await async_setup_cloud(
+        hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
+    )
+
+    response = await _call(
+        hass,
+        "get_lock_credential_status",
+        {"credential_index": slot},
+        return_response=True,
+    )
+
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(slot)
+    assert response == {ENTITY_ID: {"credential_exists": False, "name": None}}

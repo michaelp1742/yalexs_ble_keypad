@@ -22,6 +22,7 @@ from homeassistant.helpers.selector import (
 from . import async_loaded_owners
 from .const import (
     CONF_CLOUD_PIN_RULES,
+    CONF_SLOT_FIELD_WIDTH,
     CONF_SLOT_RANGE_SOURCE,
     DEFAULT_OPTIONS,
     DOMAIN,
@@ -115,6 +116,9 @@ class OptionsFlowHandler(OptionsFlowWithReload):
                             translation_key=CONF_SLOT_RANGE_SOURCE,
                         )
                     ),
+                    probatio.Required(
+                        CONF_SLOT_FIELD_WIDTH, default=options[CONF_SLOT_FIELD_WIDTH]
+                    ): bool,
                 }
             ),
         )

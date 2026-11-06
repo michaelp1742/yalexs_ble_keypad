@@ -37,6 +37,9 @@ MAX_PIN_LENGTH = 8
 # The keycode commands hold the slot in two bytes.
 MAX_SLOT = 0xFFFF
 
+# The lowest slot the library's keycode calls take.
+MIN_SLOT = 1
+
 # The master code's slot when the cloud record's capabilities are not read.
 MASTER_CODE_SLOT = 0xFFEE
 
@@ -45,6 +48,7 @@ DEFAULT_PIN_LENGTH = 5
 
 CONF_CLOUD_PIN_RULES = "cloud_pin_rules"
 CONF_SLOT_RANGE_SOURCE = "slot_range_source"
+CONF_SLOT_FIELD_WIDTH = "slot_field_width"
 
 SLOT_RANGE_CONSTANTS = "constants"
 SLOT_RANGE_CLOUD = "cloud"
@@ -52,4 +56,5 @@ SLOT_RANGE_CLOUD = "cloud"
 DEFAULT_OPTIONS: Final[dict[str, Any]] = {
     CONF_CLOUD_PIN_RULES: False,
     CONF_SLOT_RANGE_SOURCE: SLOT_RANGE_CONSTANTS,
+    CONF_SLOT_FIELD_WIDTH: False,
 }
