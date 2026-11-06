@@ -241,13 +241,13 @@ async def test_set_credential_rejects_slot_and_type_before_the_lock(
     ("error", "exception", "message"),
     [
         pytest.param(
-            KeycodeError("set", OperationError.KEYCODE_EXISTING_KEY),
+            KeycodeError("commit_keycode", OperationError.KEYCODE_EXISTING_KEY),
             ServiceValidationError,
-            "already used in another slot",
+            "already exists on the lock",
             id="existing_key",
         ),
         pytest.param(
-            KeycodeError("set", OperationError.KEYCODE_NOSPACE),
+            KeycodeError("commit_keycode", OperationError.NACK),
             HomeAssistantError,
             "rejected the keypad request",
             id="keycode_error",
@@ -511,7 +511,7 @@ async def test_credential_status_error(
 ) -> None:
     """Test status errors are translated."""
     mock_lock.push_lock.get_keycode.side_effect = KeycodeError(
-        "get", OperationError.KEYCODE_TIMEOUT
+        "get_keycode", OperationError.KEYCODE_TIMEOUT
     )
     with pytest.raises(HomeAssistantError, match="rejected the keypad request"):
         await _call(

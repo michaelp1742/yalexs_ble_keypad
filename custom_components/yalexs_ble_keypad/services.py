@@ -47,6 +47,18 @@ from .store import StoredPin
 
 _LOGGER = logging.getLogger(__name__)
 
+# The steps of a set that follow its Clear, so a refusal at one leaves the slot empty.
+_SET_STEPS_AFTER_CLEAR = frozenset(
+    {"set_keycode", "set_keycode_access", "commit_keycode"}
+)
+
+_REFUSAL_KEYS: dict[OperationError | int, str] = {
+    OperationError.KEYCODE_EXISTING_KEY: "pin_already_in_use",
+    OperationError.KEYCODE_NOSPACE: "keycode_no_space",
+    OperationError.KEYCODE_TIMEOUT: "keycode_timeout",
+    OperationError.KEYCODE_SLOT_IN_USE: "keycode_slot_in_use",
+}
+
 _CREDENTIAL_TYPE = probatio.Required(YaleXSBLEKeypadServiceArgument.CREDENTIAL_TYPE)
 _CREDENTIAL_INDEX = probatio.Required(YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX)
 
@@ -73,17 +85,26 @@ def _translate_keycode_errors() -> Generator[None]:
     try:
         yield
     except KeycodeError as err:
-        if err.error is OperationError.KEYCODE_EXISTING_KEY:
-            raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="pin_already_in_use"
+        if err.command in _SET_STEPS_AFTER_CLEAR and (
+            key := _REFUSAL_KEYS.get(err.error)
+        ):
+            error_type = (
+                ServiceValidationError
+                if key == "pin_already_in_use"
+                else HomeAssistantError
+            )
+            raise error_type(
+                translation_domain=DOMAIN,
+                translation_key=key,
+                translation_placeholders={"step": err.command},
             ) from err
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="keycode_error",
             translation_placeholders={"error": str(err)},
         ) from err
-    except ValueError:
-        # The library's message carries the raw PIN bytes of a malformed read.
+    except ValueError as err:
+        _LOGGER.debug("Keycode operation failed: %s", type(err).__name__)
         raise HomeAssistantError(
             translation_domain=DOMAIN, translation_key="invalid_response"
         ) from None
