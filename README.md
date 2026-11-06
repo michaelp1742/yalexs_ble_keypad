@@ -221,6 +221,11 @@ read. Needs nothing more.
 - With the `yalexs_ble` logger at debug, yalexs-ble logs each frame it receives from the lock, decrypted, in
   hexadecimal, and the lock's answers to a set and to a status read hold the PIN.
 
+## Icon
+
+The integration's icon is drawn from the lock-smart icon (`mdi-lock-smart`) of Material Design Icons by
+[Pictogrammers](https://pictogrammers.com/), which is under the Apache License 2.0.
+
 ## Development
 
 ```sh
