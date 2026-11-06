@@ -13,8 +13,78 @@
     }
   },
   "exceptions": {
+    "communication_error": {
+      "message": "Failed to communicate with the lock."
+    },
+    "invalid_pin": {
+      "message": "The PIN must be 4 to 8 digits."
+    },
+    "invalid_response": {
+      "message": "The lock returned an invalid response."
+    },
+    "keycode_error": {
+      "message": "The lock rejected the keypad request: {error}"
+    },
+    "lock_not_running": {
+      "message": "The lock connection is not running."
+    },
     "owner_not_loaded": {
       "message": "Yale Access Bluetooth has not loaded this lock"
+    },
+    "pin_already_in_use": {
+      "message": "This PIN is already used in another slot. The target slot was cleared and is now empty."
+    }
+  },
+  "services": {
+    "clear_lock_credential": {
+      "description": "Clears a keypad PIN from a slot on the lock.",
+      "fields": {
+        "credential_index": {
+          "description": "The keypad PIN slot, from 1 to 250.",
+          "name": "Credential index"
+        },
+        "credential_type": {
+          "description": "The type of credential. Only PIN is supported.",
+          "name": "Credential type"
+        }
+      },
+      "name": "Clear lock credential"
+    },
+    "get_lock_credential_status": {
+      "description": "Returns whether a keypad PIN slot is in use and its name. The PIN itself is never returned.",
+      "fields": {
+        "credential_index": {
+          "description": "The keypad PIN slot, from 1 to 250.",
+          "name": "Credential index"
+        },
+        "credential_type": {
+          "description": "The type of credential. Only PIN is supported.",
+          "name": "Credential type"
+        }
+      },
+      "name": "Get lock credential status"
+    },
+    "set_lock_credential": {
+      "description": "Sets a keypad PIN in a slot on the lock.",
+      "fields": {
+        "credential_data": {
+          "description": "The PIN, 4 to 8 digits.",
+          "name": "Credential data"
+        },
+        "credential_index": {
+          "description": "The keypad PIN slot, from 1 to 250.",
+          "name": "Credential index"
+        },
+        "credential_type": {
+          "description": "The type of credential. Only PIN is supported.",
+          "name": "Credential type"
+        },
+        "name": {
+          "description": "A label for the slot, used as the changed by value when the PIN is used. Leave empty to keep the existing label.",
+          "name": "Name"
+        }
+      },
+      "name": "Set lock credential"
     }
   }
 }

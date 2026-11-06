@@ -5,12 +5,18 @@ from typing import TYPE_CHECKING
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, OWNER_DOMAIN
 from .models import YaleXSBLEKeypadConfigEntry, YaleXSBLEKeypadData
+from .services import async_setup_services
+from .store import CredentialNames, async_remove_credential_names
 
 if TYPE_CHECKING:
     from homeassistant.components.yalexs_ble import YALEXSBLEConfigEntry
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 @callback
@@ -22,6 +28,12 @@ def async_loaded_owners(hass: HomeAssistant) -> dict[str, YALEXSBLEConfigEntry]:
     }
 
 
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the Yale Access Bluetooth integration services."""
+    async_setup_services(hass)
+    return True
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry
 ) -> bool:
@@ -31,8 +43,13 @@ async def async_setup_entry(
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN, translation_key="owner_not_loaded"
         )
+    credential_names = CredentialNames(hass, entry)
+    await credential_names.async_load()
     entry.runtime_data = YaleXSBLEKeypadData(
-        title=owner.title, address=address, lock=owner.runtime_data.lock
+        title=owner.title,
+        address=address,
+        lock=owner.runtime_data.lock,
+        credential_names=credential_names,
     )
 
     reload_scheduled = False
@@ -57,3 +74,10 @@ async def async_unload_entry(
 ) -> bool:
     """Unload a config entry."""
     return True
+
+
+async def async_remove_entry(
+    hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry
+) -> None:
+    """Remove stored data when the config entry is removed."""
+    await async_remove_credential_names(hass, entry.entry_id)

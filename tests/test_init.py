@@ -3,7 +3,6 @@
 from freezegun.api import FrozenDateTimeFactory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.yalexs_ble_keypad.models import YaleXSBLEKeypadData
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 
@@ -60,8 +59,11 @@ async def test_core_change_reloads_entry_once(
 ) -> None:
     """Each reload or unload of core's entry reloads the entry once."""
     assert await hass.config_entries.async_setup(config_entry.entry_id)
-    assert config_entry.runtime_data == YaleXSBLEKeypadData(
-        title=TITLE, address=ADDRESS, lock=owner_entry.runtime_data.lock
+    data = config_entry.runtime_data
+    assert (data.title, data.address, data.lock) == (
+        TITLE,
+        ADDRESS,
+        owner_entry.runtime_data.lock,
     )
     states: list[ConfigEntryState] = []
     config_entry.async_on_state_change(lambda: states.append(config_entry.state))
