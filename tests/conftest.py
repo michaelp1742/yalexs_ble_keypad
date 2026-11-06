@@ -13,12 +13,12 @@ from pytest_homeassistant_custom_component.common import (
 )
 from yalexs_ble import PushLock
 
-from custom_components.yalexs_ble_keypad.const import DOMAIN, OWNER_DOMAIN
+from custom_components.yalexs_ble_keypad.const import CLOUD_DOMAIN, DOMAIN, OWNER_DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigFlow
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import HomeAssistant
 
-from . import ADDRESS, TITLE, async_setup_owner
+from . import ADDRESS, TITLE, YaleData, async_setup_owner
 
 
 @pytest.fixture(autouse=True)
@@ -51,6 +51,27 @@ def mock_owner_integration(hass: HomeAssistant) -> Iterator[None]:
     )
     mock_platform(hass, f"{OWNER_DOMAIN}.config_flow")
     with mock_config_flow(OWNER_DOMAIN, _OwnerConfigFlow):
+        yield
+
+
+async def _async_setup_cloud_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Load the yale entry with the cloud records its data holds."""
+    entry.runtime_data = YaleData(entry.data["records"])
+    return True
+
+
+class _CloudConfigFlow(ConfigFlow):
+    """Stand in for the config flow of core's yale."""
+
+
+@pytest.fixture(autouse=True)
+def mock_cloud_integration(hass: HomeAssistant) -> Iterator[None]:
+    """Stand in for core's yale, which needs the cloud."""
+    mock_integration(
+        hass, MockModule(CLOUD_DOMAIN, async_setup_entry=_async_setup_cloud_entry)
+    )
+    mock_platform(hass, f"{CLOUD_DOMAIN}.config_flow")
+    with mock_config_flow(CLOUD_DOMAIN, _CloudConfigFlow):
         yield
 
 
