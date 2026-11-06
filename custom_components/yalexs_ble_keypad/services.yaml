@@ -15,8 +15,8 @@ clear_lock_credential:
       required: true
       selector:
         number:
-          min: 1
-          max: 250
+          min: 0
+          max: 65535
           step: 1
           mode: box
 
@@ -37,8 +37,8 @@ get_lock_credential_status:
       required: true
       selector:
         number:
-          min: 1
-          max: 250
+          min: 0
+          max: 65535
           step: 1
           mode: box
 
@@ -64,8 +64,8 @@ set_lock_credential:
       required: true
       selector:
         number:
-          min: 1
-          max: 250
+          min: 0
+          max: 65535
           step: 1
           mode: box
     name:

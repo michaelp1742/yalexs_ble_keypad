@@ -173,18 +173,25 @@ async def test_set_credential_invalid_pin(
 
 @pytest.mark.usefixtures("entry")
 @pytest.mark.parametrize(
-    "data",
+    ("data", "exception"),
     [
-        pytest.param({"credential_index": 0}, id="slot_low"),
-        pytest.param({"credential_index": 251}, id="slot_high"),
-        pytest.param({"credential_index": 1, "credential_type": "rfid"}, id="type"),
+        pytest.param({"credential_index": 0}, ServiceValidationError, id="slot_low"),
+        pytest.param({"credential_index": 251}, ServiceValidationError, id="slot_high"),
+        pytest.param(
+            {"credential_index": 1, "credential_type": "rfid"},
+            probatio.MultipleInvalid,
+            id="type",
+        ),
     ],
 )
-async def test_set_credential_schema_rejects(
-    hass: HomeAssistant, mock_lock: MockLock, data: dict[str, Any]
+async def test_set_credential_rejects_slot_and_type_before_the_lock(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    data: dict[str, Any],
+    exception: type[Exception],
 ) -> None:
-    """Test the service schema rejects out of range slots and other types."""
-    with pytest.raises(probatio.MultipleInvalid):
+    """Test a slot outside the PIN range or a credential type other than pin is refused and the lock is not called."""
+    with pytest.raises(exception):
         await _call(hass, "set_lock_credential", {"credential_data": "1234", **data})
     mock_lock.push_lock.set_keycode.assert_not_awaited()
 
@@ -557,7 +564,6 @@ async def test_device_target_set_credential_runs_once(
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(5, "1234")
     assert name_set.await_count == 1
     assert entry.runtime_data.credential_names.get(5) == "Jesse"
-    assert not entry.runtime_data.credential_operations
 
 
 async def test_device_target_clear_credential_runs_once(
@@ -629,9 +635,6 @@ async def test_parallel_set_credential_different_slots_both_run(
         (1, "1234"),
         (2, "1234"),
     ]
-    assert not hass.config_entries.async_entries(DOMAIN)[
-        0
-    ].runtime_data.credential_operations
 
 
 @pytest.mark.usefixtures("entry")
@@ -693,7 +696,6 @@ async def test_device_target_failure_runs_once(
         await _call_device(hass, device_registry, entry, service, data)
 
     getattr(mock_lock.push_lock, method).assert_awaited_once()
-    assert not entry.runtime_data.credential_operations
 
 
 async def test_device_target_invalid_pin(
@@ -740,46 +742,6 @@ async def test_cancelled_set_credential_removes_name(
         await task
 
     assert entry.runtime_data.credential_names.get(3) is None
-    assert not entry.runtime_data.credential_operations
-
-
-async def test_unload_cancels_credential_operation_and_removal_deletes_store(
-    hass: HomeAssistant,
-    mock_lock: MockLock,
-    entry: MockConfigEntry,
-    hass_storage: dict[str, Any],
-) -> None:
-    """Test an in-flight credential operation ends on unload and cannot recreate storage."""
-    entry.runtime_data.credential_names._names["3"] = "Guest"
-    started = asyncio.Event()
-
-    async def hang(slot: int, pin: str) -> None:
-        started.set()
-        await asyncio.Event().wait()
-
-    mock_lock.push_lock.set_keycode.side_effect = hang
-    task = hass.async_create_task(
-        _call(
-            hass,
-            "set_lock_credential",
-            {"credential_data": "1234", "credential_index": 3, "name": "New"},
-        )
-    )
-    await started.wait()
-    operations = entry.runtime_data.credential_operations
-    assert len(operations) == 1
-    (operation,) = operations.values()
-
-    await hass.config_entries.async_unload(entry.entry_id)
-
-    assert operation.cancelled()
-    assert not operations
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-    await hass.config_entries.async_remove(entry.entry_id)
-    await hass.async_block_till_done()
-    assert STORAGE_KEY.format(entry.entry_id) not in hass_storage
 
 
 async def test_unload_waits_for_in_flight_name_save_before_removal(
@@ -788,7 +750,7 @@ async def test_unload_waits_for_in_flight_name_save_before_removal(
     entry: MockConfigEntry,
     hass_storage: dict[str, Any],
 ) -> None:
-    """Test a cancelled operation cannot recreate storage after removal."""
+    """Test unload waits for an in-flight name save, so removal afterwards leaves no stored names."""
     original_write = Store._async_write_data
     write_started = asyncio.Event()
     write_done = asyncio.Event()
@@ -815,8 +777,8 @@ async def test_unload_waits_for_in_flight_name_save_before_removal(
         await write_started.wait()
         hass.loop.call_later(0.05, release.set)
         await hass.config_entries.async_unload(entry.entry_id)
-        with pytest.raises(asyncio.CancelledError):
-            await task
+        assert write_done.is_set()
+        await task
         await hass.config_entries.async_remove(entry.entry_id)
         await write_done.wait()
 
@@ -845,7 +807,6 @@ async def test_cancelled_clear_credential_removes_name(
         await task
 
     assert entry.runtime_data.credential_names.get(3) is None
-    assert not entry.runtime_data.credential_operations
 
 
 @pytest.mark.usefixtures("entry")

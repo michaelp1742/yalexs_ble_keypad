@@ -1,8 +1,6 @@
 """Models for the Yale Access Bluetooth Keypad integration."""
 
-import asyncio
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 from yalexs_ble import PushLock
 
@@ -19,9 +17,6 @@ class YaleXSBLEKeypadData:
     address: str
     lock: PushLock
     credential_names: CredentialNames
-    credential_operations: dict[
-        tuple[str, str, tuple[tuple[str, Any], ...]], asyncio.Task[Any]
-    ] = field(default_factory=dict)
 
 
 type YaleXSBLEKeypadConfigEntry = ConfigEntry[YaleXSBLEKeypadData]

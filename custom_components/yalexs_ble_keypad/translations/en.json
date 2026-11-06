@@ -22,11 +22,20 @@
     "invalid_response": {
       "message": "The lock returned an invalid response."
     },
+    "invalid_slot": {
+      "message": "The slot must be from {min} to {max}."
+    },
     "keycode_error": {
       "message": "The lock rejected the keypad request: {error}"
     },
+    "lock_not_configured": {
+      "message": "The lock of {entity_id} has no Yale Access Bluetooth Keypad entry."
+    },
     "lock_not_running": {
       "message": "The lock connection is not running."
+    },
+    "no_lock_targeted": {
+      "message": "The action targets no Yale Access Bluetooth lock."
     },
     "owner_not_loaded": {
       "message": "Yale Access Bluetooth has not loaded this lock"
@@ -40,7 +49,7 @@
       "description": "Clears a keypad PIN from a slot on the lock.",
       "fields": {
         "credential_index": {
-          "description": "The keypad PIN slot, from 1 to 250.",
+          "description": "The keypad PIN slot.",
           "name": "Credential index"
         },
         "credential_type": {
@@ -54,7 +63,7 @@
       "description": "Returns whether a keypad PIN slot is in use and its name. The PIN itself is never returned.",
       "fields": {
         "credential_index": {
-          "description": "The keypad PIN slot, from 1 to 250.",
+          "description": "The keypad PIN slot.",
           "name": "Credential index"
         },
         "credential_type": {
@@ -72,7 +81,7 @@
           "name": "Credential data"
         },
         "credential_index": {
-          "description": "The keypad PIN slot, from 1 to 250.",
+          "description": "The keypad PIN slot.",
           "name": "Credential index"
         },
         "credential_type": {

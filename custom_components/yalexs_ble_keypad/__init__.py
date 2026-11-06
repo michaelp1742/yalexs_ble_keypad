@@ -29,7 +29,7 @@ def async_loaded_owners(hass: HomeAssistant) -> dict[str, YALEXSBLEConfigEntry]:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the Yale Access Bluetooth integration services."""
+    """Register the keypad PIN actions."""
     async_setup_services(hass)
     return True
 

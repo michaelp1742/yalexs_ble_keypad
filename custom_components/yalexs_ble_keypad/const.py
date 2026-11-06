@@ -1,21 +1,22 @@
 """Constants for the Yale Access Bluetooth Keypad integration."""
 
 from enum import StrEnum
+import re
 
 DOMAIN = "yalexs_ble_keypad"
 OWNER_DOMAIN = "yalexs_ble"
 
 
-class YaleXSBLEService(StrEnum):
-    """Store keys for Yale Access Bluetooth services."""
+class YaleXSBLEKeypadService(StrEnum):
+    """The keypad PIN actions."""
 
     CLEAR_LOCK_CREDENTIAL = "clear_lock_credential"
     GET_LOCK_CREDENTIAL_STATUS = "get_lock_credential_status"
     SET_LOCK_CREDENTIAL = "set_lock_credential"
 
 
-class YaleXSBLEServiceArgument(StrEnum):
-    """Store keys for Yale Access Bluetooth service arguments."""
+class YaleXSBLEKeypadServiceArgument(StrEnum):
+    """The fields of the keypad PIN actions."""
 
     CREDENTIAL_DATA = "credential_data"
     CREDENTIAL_INDEX = "credential_index"
@@ -27,3 +28,7 @@ CREDENTIAL_TYPE_PIN = "pin"
 
 MIN_PIN_SLOT = 1
 MAX_PIN_SLOT = 250
+PIN_PATTERN = re.compile(r"[0-9]{4,8}")
+
+# The keycode commands hold the slot in two bytes.
+MAX_SLOT = 0xFFFF
