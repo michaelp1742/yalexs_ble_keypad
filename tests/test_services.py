@@ -46,7 +46,9 @@ FRONT_DOOR_RECORD = cloud_record(
         "batteryLevel": "Full",
     },
 )
-FRONT_DOOR_CAPABILITIES = {"lock": {"pinLength": 6, "masterPinSlot": 65518}}
+FRONT_DOOR_CAPABILITIES = {
+    "lock": {"pinLength": 6, "masterPinSlot": 65518, "pinSlotMin": 1, "pinSlotMax": 100}
+}
 
 
 class MockLock:
@@ -931,3 +933,29 @@ async def test_cloud_pin_rules_check_the_pin_length_from_the_record(
         {"credential_data": "123456", "credential_index": 12},
     )
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(12, "123456")
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", [{"slot_range_source": "cloud"}])
+async def test_cloud_slot_range_from_the_record(
+    hass: HomeAssistant, mock_lock: MockLock
+) -> None:
+    """With the slot range from the cloud, the record's top slot is sent and the slot past it is refused with the record's range."""
+    await async_setup_cloud(
+        hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
+    )
+
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "1234", "credential_index": 100},
+    )
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(100, "1234")
+
+    with pytest.raises(ServiceValidationError, match="The slot must be from 1 to 100"):
+        await _call(
+            hass,
+            "set_lock_credential",
+            {"credential_data": "5678", "credential_index": 101},
+        )
+    mock_lock.push_lock.set_keycode.assert_awaited_once()

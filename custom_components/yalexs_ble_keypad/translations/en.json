@@ -69,11 +69,21 @@
     "step": {
       "init": {
         "data": {
-          "cloud_pin_rules": "PIN rules from the cloud record"
+          "cloud_pin_rules": "PIN rules from the cloud record",
+          "slot_range_source": "Slot range"
         },
         "data_description": {
-          "cloud_pin_rules": "Checks the PIN length against the lock's cloud record, refuses every action when the record shows no keypad, and refuses a set or clear at the master code's slot the record names. When no loaded Yale Home integration holds the lock's record with its capabilities, the PIN is 4 to 8 digits and every action is offered."
+          "cloud_pin_rules": "Checks the PIN length against the lock's cloud record, refuses every action when the record shows no keypad, and refuses a set or clear at the master code's slot the record names. When no loaded Yale Home integration holds the lock's record with its capabilities, the PIN is 4 to 8 digits and every action is offered.",
+          "slot_range_source": "The source of the range of PIN slots that the set, clear, and status actions accept. Cloud record takes pinSlotMin to pinSlotMax from the lock's cloud record, and falls back to 1 to 250 when no loaded Yale integration holds the lock's record with both values."
         }
+      }
+    }
+  },
+  "selector": {
+    "slot_range_source": {
+      "options": {
+        "cloud": "Cloud record",
+        "constants": "1 to 250"
       }
     }
   },

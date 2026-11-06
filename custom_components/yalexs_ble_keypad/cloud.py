@@ -9,10 +9,14 @@ from homeassistant.core import HomeAssistant, callback
 from .const import (
     CLOUD_DOMAIN,
     CONF_CLOUD_PIN_RULES,
+    CONF_SLOT_RANGE_SOURCE,
     DEFAULT_PIN_LENGTH,
     MASTER_CODE_SLOT,
     MAX_PIN_LENGTH,
+    MAX_PIN_SLOT,
     MIN_PIN_LENGTH,
+    MIN_PIN_SLOT,
+    SLOT_RANGE_CLOUD,
 )
 
 if TYPE_CHECKING:
@@ -36,6 +40,8 @@ class LockPinParameters:
     has_keypad: bool | None
     pin_length_min: int
     pin_length_max: int
+    pin_slot_min: int
+    pin_slot_max: int
     master_pin_slot: int | None
     cloud_pins: tuple[CloudPin, ...]
 
@@ -70,19 +76,30 @@ def _pin_length_range(capabilities: Mapping[str, Any]) -> tuple[int, int]:
     return DEFAULT_PIN_LENGTH, DEFAULT_PIN_LENGTH
 
 
+def _pin_slot_range(capabilities: Mapping[str, Any]) -> tuple[int, int]:
+    """Return the lowest and highest PIN slot the capabilities give, else the constants."""
+    if isinstance(low := capabilities.get("pinSlotMin"), int) and isinstance(
+        high := capabilities.get("pinSlotMax"), int
+    ):
+        return low, high
+    return MIN_PIN_SLOT, MAX_PIN_SLOT
+
+
 @callback
 def lock_pin_parameters(
     hass: HomeAssistant, address: str, options: Mapping[str, Any]
 ) -> LockPinParameters:
     """Return the PIN parameters of the lock at the address, read from its cloud record on each call."""
     detail = async_cloud_lock_detail(hass, address)
+    capabilities = None if detail is None else _lock_capabilities(detail)
     has_keypad: bool | None = None
     pin_length_min, pin_length_max = MIN_PIN_LENGTH, MAX_PIN_LENGTH
+    pin_slot_min, pin_slot_max = MIN_PIN_SLOT, MAX_PIN_SLOT
     master_pin_slot: int | None = MASTER_CODE_SLOT
     if (
         options[CONF_CLOUD_PIN_RULES]
         and detail is not None
-        and (capabilities := _lock_capabilities(detail)) is not None
+        and capabilities is not None
     ):
         has_keypad = (
             detail.keypad is not None or capabilities.get("integratedKeypad") is True
@@ -93,11 +110,15 @@ def lock_pin_parameters(
             if isinstance(slot := capabilities.get("masterPinSlot"), int) and slot > 0
             else None
         )
+    if options[CONF_SLOT_RANGE_SOURCE] == SLOT_RANGE_CLOUD and capabilities is not None:
+        pin_slot_min, pin_slot_max = _pin_slot_range(capabilities)
     return LockPinParameters(
         record_read=detail is not None,
         has_keypad=has_keypad,
         pin_length_min=pin_length_min,
         pin_length_max=pin_length_max,
+        pin_slot_min=pin_slot_min,
+        pin_slot_max=pin_slot_max,
         master_pin_slot=master_pin_slot,
         cloud_pins=()
         if detail is None

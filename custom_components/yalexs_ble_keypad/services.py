@@ -34,9 +34,7 @@ from .cloud import CloudPin, LockPinParameters, lock_pin_parameters
 from .const import (
     CREDENTIAL_TYPE_PIN,
     DOMAIN,
-    MAX_PIN_SLOT,
     MAX_SLOT,
-    MIN_PIN_SLOT,
     OWNER_DOMAIN,
     PIN_PATTERN,
     YaleXSBLEKeypadService,
@@ -169,15 +167,15 @@ def _check_keypad(parameters: LockPinParameters) -> None:
         )
 
 
-def _check_slot(slot: int) -> None:
-    """Raise when the slot is outside the range of PIN slots."""
-    if not MIN_PIN_SLOT <= slot <= MAX_PIN_SLOT:
+def _check_slot(slot: int, parameters: LockPinParameters) -> None:
+    """Raise when the slot is outside the range of PIN slots in the parameters."""
+    if not parameters.pin_slot_min <= slot <= parameters.pin_slot_max:
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="invalid_slot",
             translation_placeholders={
-                "min": str(MIN_PIN_SLOT),
-                "max": str(MAX_PIN_SLOT),
+                "min": str(parameters.pin_slot_min),
+                "max": str(parameters.pin_slot_max),
             },
         )
 
@@ -240,7 +238,7 @@ async def _async_set_credential(
     )
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
-    _check_slot(slot)
+    _check_slot(slot, parameters)
     _check_not_master_code_slot(slot, parameters)
     pin: str = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_DATA]
     _check_pin(pin, parameters)
@@ -280,7 +278,7 @@ async def _async_clear_credential(
     )
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
-    _check_slot(slot)
+    _check_slot(slot, parameters)
     _check_not_master_code_slot(slot, parameters)
     pins = entry.runtime_data.pins
     try:
@@ -301,11 +299,12 @@ async def _async_credential_status(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> dict[str, bool | str | None]:
     """Read a keypad PIN slot from the entry's lock."""
-    _check_keypad(
-        lock_pin_parameters(hass, entry.runtime_data.address, entry_options(entry))
+    parameters = lock_pin_parameters(
+        hass, entry.runtime_data.address, entry_options(entry)
     )
+    _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
-    _check_slot(slot)
+    _check_slot(slot, parameters)
     with _translate_keycode_errors():
         exists = await entry.runtime_data.lock.get_keycode(slot) is not None
     stored = entry.runtime_data.pins.get(slot) if exists else None

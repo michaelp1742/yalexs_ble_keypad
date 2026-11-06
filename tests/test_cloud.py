@@ -35,6 +35,8 @@ def _parameters(
         has_keypad=None,
         pin_length_min=4,
         pin_length_max=8,
+        pin_slot_min=1,
+        pin_slot_max=250,
         master_pin_slot=0xFFEE,
         cloud_pins=cloud_pins,
     )

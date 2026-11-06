@@ -16,10 +16,18 @@ from homeassistant.helpers.selector import (
     SelectOptionDict,
     SelectSelector,
     SelectSelectorConfig,
+    SelectSelectorMode,
 )
 
 from . import async_loaded_owners
-from .const import CONF_CLOUD_PIN_RULES, DEFAULT_OPTIONS, DOMAIN
+from .const import (
+    CONF_CLOUD_PIN_RULES,
+    CONF_SLOT_RANGE_SOURCE,
+    DEFAULT_OPTIONS,
+    DOMAIN,
+    SLOT_RANGE_CLOUD,
+    SLOT_RANGE_CONSTANTS,
+)
 from .models import entry_options
 
 
@@ -98,6 +106,15 @@ class OptionsFlowHandler(OptionsFlowWithReload):
                     probatio.Required(
                         CONF_CLOUD_PIN_RULES, default=options[CONF_CLOUD_PIN_RULES]
                     ): bool,
+                    probatio.Required(
+                        CONF_SLOT_RANGE_SOURCE, default=options[CONF_SLOT_RANGE_SOURCE]
+                    ): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[SLOT_RANGE_CONSTANTS, SLOT_RANGE_CLOUD],
+                            mode=SelectSelectorMode.DROPDOWN,
+                            translation_key=CONF_SLOT_RANGE_SOURCE,
+                        )
+                    ),
                 }
             ),
         )
