@@ -44,6 +44,7 @@ async def test_user_flow_adds_each_loaded_lock_once(hass: HomeAssistant) -> None
         "slot_range_source": "constants",
         "slot_field_width": False,
         "status_result": False,
+        "occupancy_cloud_pins": False,
     }
     assert result["result"].unique_id == ADDRESS
 
@@ -76,6 +77,7 @@ async def test_options_flow_stores_the_switches_and_reloads(
         "slot_range_source": "cloud",
         "slot_field_width": True,
         "status_result": True,
+        "occupancy_cloud_pins": True,
     }
 
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
@@ -85,6 +87,7 @@ async def test_options_flow_stores_the_switches_and_reloads(
         "slot_range_source": "constants",
         "slot_field_width": False,
         "status_result": False,
+        "occupancy_cloud_pins": False,
     }
 
     result = await hass.config_entries.options.async_configure(

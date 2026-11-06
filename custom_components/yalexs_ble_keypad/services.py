@@ -32,6 +32,7 @@ from homeassistant.helpers.target import (
 
 from .cloud import CloudPin, LockPinParameters, lock_pin_parameters
 from .const import (
+    CONF_OCCUPANCY_CLOUD_PINS,
     CONF_SLOT_FIELD_WIDTH,
     CONF_STATUS_RESULT,
     CREDENTIAL_TYPE_PIN,
@@ -256,6 +257,17 @@ async def _async_set_credential(
             translation_domain=DOMAIN,
             translation_key="pin_in_use",
             translation_placeholders={"slot": str(used_slot)},
+        )
+    # Every state counts: the lock holds the PIN of each entry but a created
+    # one until the app's next sync acts on it, and a created entry is loaded
+    # at that sync.
+    if options[CONF_OCCUPANCY_CLOUD_PINS] and any(
+        cloud_pin.slot == slot for cloud_pin in parameters.cloud_pins
+    ):
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="slot_in_use",
+            translation_placeholders={"slot": str(slot)},
         )
     try:
         with _translate_keycode_errors():

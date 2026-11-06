@@ -63,6 +63,9 @@
     },
     "pin_in_use": {
       "message": "This PIN is already assigned to slot {slot}. Nothing was sent to the lock."
+    },
+    "slot_in_use": {
+      "message": "Slot {slot} is assigned to a PIN in the lock's cloud record. Nothing was sent to the lock."
     }
   },
   "options": {
@@ -70,12 +73,14 @@
       "init": {
         "data": {
           "cloud_pin_rules": "PIN rules from the cloud record",
+          "occupancy_cloud_pins": "Slots in the cloud record are taken",
           "slot_field_width": "Slots 1 to 65535",
           "slot_range_source": "Slot range",
           "status_result": "Status answer"
         },
         "data_description": {
           "cloud_pin_rules": "Checks the PIN length against the lock's cloud record, refuses every action when the record shows no keypad, and refuses a set or clear at the master code's slot the record names. When no loaded Yale Home integration holds the lock's record with its capabilities, the PIN is 4 to 8 digits and every action is offered.",
+          "occupancy_cloud_pins": "Refuses a set at a slot that an entry of the pins block of the lock's cloud record holds, whatever the entry's state, before anything is sent to the lock.",
           "slot_field_width": "Lets each action take any slot from 1 to 65535 in place of the slot range, and lets the status action read the master code's slot. The set and clear actions still refuse the master code's slot.",
           "slot_range_source": "The source of the range of PIN slots that the set, clear, and status actions accept. Cloud record takes pinSlotMin to pinSlotMax from the lock's cloud record, and falls back to 1 to 250 when no loaded Yale integration holds the lock's record with both values.",
           "status_result": "Adds result to the status action's answer: pin, empty, the name of the lock's refusal, malformed, or timeout. None of these raises an error. credential_exists is null unless the result is pin or empty."

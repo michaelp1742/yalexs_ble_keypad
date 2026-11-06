@@ -1073,3 +1073,31 @@ async def test_status_result_returns_the_slots_result_without_raising(
 
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
     assert response == {ENTITY_ID: expected}
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize("options", [{"occupancy_cloud_pins": True}])
+async def test_occupancy_cloud_pins_refuses_a_slot_in_the_pins_block(
+    hass: HomeAssistant, mock_lock: MockLock
+) -> None:
+    """With the cloud record's slots taken, a set at a slot that a created entry of the pins block holds is refused before any frame."""
+    # A constructed pins block with one entry in the created state, the one state whose PIN is not yet on the lock.
+    record = {
+        **FRONT_DOOR_RECORD,
+        "pins": {
+            "created": [
+                {"slot": 100, "pin": "975310", "state": "created", "type": "pin"}
+            ]
+        },
+    }
+    await async_setup_cloud(hass, [record], {"front": FRONT_DOOR_CAPABILITIES})
+
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await _call(
+            hass,
+            "set_lock_credential",
+            {"credential_data": "1234", "credential_index": 100},
+        )
+    assert exc_info.value.translation_key == "slot_in_use"
+    assert exc_info.value.translation_placeholders == {"slot": "100"}
+    mock_lock.push_lock.set_keycode.assert_not_awaited()
