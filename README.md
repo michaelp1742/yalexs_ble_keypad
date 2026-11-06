@@ -147,8 +147,14 @@ After `pin_already_in_use`, `keycode_no_space`, `keycode_timeout`, or `keycode_s
 
 ## Installation
 
-Copy `custom_components/yalexs_ble_keypad` into the `custom_components` folder of your Home Assistant configuration,
-then restart Home Assistant.
+With [HACS](https://hacs.xyz/):
+
+1. In HACS, open the menu at the top right and pick **Custom repositories**.
+2. Add `https://github.com/Michaelp1742/yalexs_ble_keypad` with the type **Integration**.
+3. Find **Yale Access Bluetooth Keypad** in HACS, download it, and restart Home Assistant.
+
+Without HACS, copy `custom_components/yalexs_ble_keypad` into the `custom_components` folder of your Home Assistant
+configuration, then restart Home Assistant.
 
 ## Setup
 
