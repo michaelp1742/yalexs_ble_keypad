@@ -8,8 +8,10 @@ adds no entity and no device, and changes nothing in Yale Access Bluetooth itsel
 activity log and sets no `changed_by`.
 
 The actions are the PIN actions of [home-assistant/core#185596](https://github.com/home-assistant/core/pull/185596),
-with its action names, fields, and admin rule, in an integration of their own. Each option of the entry turns on one
-behavior under test, such as taking the lock's PIN length or slot range from its cloud record. Every option starts off.
+with its action names, fields, and admin rule, in an integration of their own. The actions check a slot and a PIN
+against the lock's cloud record, as the Yale Home integration holds it, and a set at a slot for which this integration
+keeps no PIN reads the slot from the lock first. The entry has one option, **Status answer**, which is on for a new
+entry.
 
 ## What it adds
 
@@ -17,8 +19,18 @@ Three actions, each for admin users only. Each action targets a Yale Access Blue
 that holds one, and ignores any other entity. A call runs once for each targeted lock, however many of the lock's
 entities it reaches. It runs the locks one after another, and the first failure ends the call.
 
-With every option off, a slot is 1 to 250 and a PIN is 4 to 8 digits. The action form takes a slot from 0 to 65535,
-and the action refuses a slot outside the lock's range before anything is sent to the lock.
+The lock's cloud record gives the rules the actions check:
+
+| Rule | From the record | Without the record or its capabilities |
+|---|---|---|
+| The slot range | `pinSlotMin` to `pinSlotMax`; 1 to 250 when either is missing | 1 to 250 |
+| The PIN length | `pinLengthMin` to `pinLengthMax` digits, or else `pinLength` digits, or else 5 digits | 4 to 8 digits |
+| The keypad | every action is refused with `no_keypad` when the record has no `keypad` block and its capabilities do not set `integratedKeypad` | every action is offered |
+| The master code's slot | `masterPinSlot` when it is above 0, otherwise none | 65518 (`0xFFEE`) |
+
+The action form takes a slot from 0 to 65535, and each action refuses a slot outside the lock's range before anything
+is sent to the lock, the master code's slot included when it is outside the range. What each rule needs is under
+[Requirements](#requirements).
 
 ### Set lock credential
 
@@ -31,13 +43,23 @@ and the action refuses a slot outside the lock's range before anything is sent t
 | `credential_index` | the slot |
 | `name` | optional: a name for the slot. Left out or empty, the slot keeps the name this integration has for it. |
 
-Before anything is sent to the lock, the action refuses a slot outside the range, a PIN that is not all digits or not
-of the allowed length, and a PIN equal to one that this integration keeps at another slot of the lock, or to one that
-the lock's cloud record holds at any slot.
+Before anything is sent to the lock, the action refuses:
+
+- a slot outside the range, and the master code's slot;
+- a PIN that is not all digits or not of the allowed length;
+- a PIN equal to one that this integration keeps at another slot of the lock, or to one that the lock's cloud record
+  holds at any slot (`pin_in_use`);
+- a slot that any entry of the `pins` block of the lock's cloud record holds, whatever the entry's state
+  (`slot_in_use`).
+
+At a slot for which this integration keeps no PIN, the action then reads the slot from the lock with yalexs-ble's
+`get_keycode`, and refuses the set with `slot_not_empty` when the lock answers that the slot holds a PIN. This finds a
+PIN the record does not show, such as one added in the Yale Home app since Yale Home last fetched the record. A read
+that fails fails the set, and nothing is written. A slot for which this integration keeps a PIN is written with no
+read, so a set replaces that PIN in place.
 
 The action then writes the PIN with yalexs-ble's `set_keycode`, which clears the slot and then writes the PIN, valid
-at all times. Unless an option below refuses the set, whatever the slot held is replaced, a PIN added in the Yale Home
-app included. When the lock has answered every step, the integration keeps the PIN and the slot's name.
+at all times. When the lock has answered every step, the integration keeps the PIN and the slot's name.
 
 When the set fails with `lock_not_running`, or because the lock refused the clear that starts the set, the
 integration keeps the slot's record. On any other failure, and when the call is cancelled, it drops the record.
@@ -51,10 +73,11 @@ integration keeps the slot's record. On any other failure, and when the call is 
 | `credential_type` | `pin` |
 | `credential_index` | the slot |
 
-The action refuses a slot outside the range before anything is sent, and then clears the slot with yalexs-ble's
-`clear_keycode`. When the lock answers, the integration drops the slot's record. When the clear fails with
-`lock_not_running`, or because the lock refused it, the integration keeps the record. On any other failure, and when
-the call is cancelled, it drops the record.
+The action refuses a slot outside the range and the master code's slot before anything is sent, and then clears the
+slot with yalexs-ble's `clear_keycode`, whatever the slot holds, a PIN added in the Yale Home app included. When the
+lock answers, the integration drops the slot's record. When the clear fails with `lock_not_running`, or because the
+lock refused it, the integration keeps the record. On any other failure, and when the call is cancelled, it drops the
+record.
 
 ### Get lock credential status
 
@@ -78,14 +101,17 @@ The response holds one answer for each targeted entity of the lock:
 lock.front_door:
   credential_exists: true
   name: Cleaner
+  result: pin
 ```
 
 | Key | Value |
 |---|---|
-| `credential_exists` | `true` when the lock answers that the slot holds a PIN, `false` when the slot is empty |
+| `credential_exists` | `true` when the lock answers that the slot holds a PIN, `false` when the slot is empty, and `null` when **Status answer** is on and `result` is neither `pin` nor `empty` |
 | `name` | the name this integration keeps for the slot when the slot holds a PIN, otherwise `null` |
+| `result` | with **Status answer** on: the result of the read, as in the table under [The option](#the-option) |
 
-The response never holds the PIN.
+The response never holds the PIN. With **Status answer** off, the response has no `result`, `credential_exists` is
+`true` or `false`, and a read that fails raises its error.
 
 ### Errors
 
@@ -112,13 +138,15 @@ These come from the lock or the connection:
 | `keycode_no_space` | the lock answered `KEYCODE_NOSPACE` (`0x07`) to a step of a set after its clear |
 | `keycode_timeout` | the lock answered `KEYCODE_TIMEOUT` (`0x08`) to a step of a set after its clear |
 | `keycode_slot_in_use` | the lock answered `KEYCODE_SLOT_IN_USE` (`0x45`) to a step of a set after its clear |
-| `keycode_error` | the lock refused the clear that starts a set, a clear, or a status read with any answer, or a later step of a set with an answer not listed above |
+| `keycode_error` | the lock refused the read before a set, the clear that starts a set, a clear, or a status read with any answer, or a later step of a set with an answer not listed above |
 | `communication_error` | the lock did not answer, or the connection failed |
 | `invalid_response` | the lock's answer to a read of a slot held no valid PIN |
 | `lock_not_running` | Yale Access Bluetooth's connection to the lock is not running, or was stopped while the command was in flight |
 
 After `pin_already_in_use`, `keycode_no_space`, `keycode_timeout`, or `keycode_slot_in_use`, the slot is empty.
-`master_code_slot`, `no_keypad`, `slot_in_use`, and `slot_not_empty` come only with the options below that add them.
+`no_keypad` and `slot_in_use` come only with the lock's cloud record. `master_code_slot` comes only where the record's
+`masterPinSlot` is inside the slot range in use. Without the record or its capabilities, the master code's slot, 65518,
+is outside the range of 1 to 250, and `invalid_slot` refuses it first.
 
 ## Requirements
 
@@ -132,15 +160,16 @@ After `pin_already_in_use`, `keycode_no_space`, `keycode_timeout`, or `keycode_s
 - yalexs-ble from #424 requires cryptography 50.0.2 or later. Home Assistant 2026.11 pins cryptography 50.0.2.
   Home Assistant 2026.10 pins cryptography 50.0.1, so on 2026.10 no cryptography version meets both.
 - For every check that reads the lock's cloud record, the Yale Home integration, set up for the account that holds the
-  lock. These are the check of a PIN against the record's PINs, and the options **PIN rules from the cloud record**,
-  **Slot range** set to **Cloud record**, and **Slots in the cloud record are taken**. This integration finds the
-  record in Yale Home's loaded entry by the lock's Bluetooth address, and makes no cloud request of its own. Yale Home
-  fetches the record when it sets up and then every 24 hours, so a PIN added in the Yale Home app since the last fetch
-  is not in it. A record that only the August integration holds is not read. Without a record, these checks refuse
-  nothing, and the options take the values they have when off.
-- For **PIN rules from the cloud record** and **Slot range** set to **Cloud record**, a yalexs whose `LockDetail` has
-  a `capabilities` property, with the lock's capabilities fetched. The yalexs that Home Assistant 2026.10 and 2026.11
-  install, 9.2.13, has no such property. Without it, these two options act as if off, and nothing says so.
+  lock. These are the four rules of [What it adds](#what-it-adds), the check of a PIN against the record's PINs, and
+  the check of a set's slot against the record's `pins` block. This integration finds the record in Yale Home's loaded
+  entry by the lock's Bluetooth address, and makes no cloud request of its own. Yale Home fetches the record when it
+  sets up and then every 24 hours, so a PIN added in the Yale Home app since the last fetch is not in it. A record that
+  only the August integration holds is not read. Without a record, the two checks against the record's PINs refuse
+  nothing, and the four rules take their values without the record.
+- For the four rules, a yalexs whose `LockDetail` has a `capabilities` property, with the lock's capabilities fetched.
+  The yalexs that Home Assistant 2026.10 and 2026.11 install, 9.2.13, has no such property. Without it, the four rules
+  take their values without the record, and nothing says so. The two checks against the record's PINs need only the
+  record.
 - At each start, Home Assistant installs the yalexs-ble and yalexs versions that Yale Access Bluetooth and Yale Home
   pin, in place of any other. Other versions stay installed when Home Assistant runs with
   `--skip-pip-packages yalexs-ble,yalexs`, or with `--skip-pip`, which skips the requirements of every integration.
@@ -162,33 +191,17 @@ configuration, then restart Home Assistant.
 2. Pick the lock. The list shows each lock that Yale Access Bluetooth has loaded and that has no Yale Access Bluetooth
    Keypad entry yet.
 
-The entry takes the title of the lock's Yale Access Bluetooth entry, starts with every option off, and adds no entity.
+The entry takes the title of the lock's Yale Access Bluetooth entry, starts with **Status answer** on, and adds no
+entity.
 When Yale Access Bluetooth reloads or unloads the lock's entry, this entry reloads, and it sets up again once Yale
 Access Bluetooth has loaded the lock. Removing the entry deletes the PINs and names it keeps; the PINs stay on the lock.
 
-## The options
+## The option
 
-Each option is in the entry's options, and a change reloads the entry.
+The option is in the entry's options, and a change reloads the entry.
 
-**PIN rules from the cloud record.** With the lock's cloud record and its capabilities:
-
-- A PIN is `pinLengthMin` to `pinLengthMax` digits, or else `pinLength` digits, or else 5 digits.
-- Every action is refused with `no_keypad` when the record has no `keypad` block and its capabilities do not set
-  `integratedKeypad`.
-- The master code's slot is the record's `masterPinSlot` when it is above 0, and there is none otherwise.
-
-Without the record or its capabilities, and with the option off, a PIN is 4 to 8 digits, every action is offered, and
-the master code's slot is 65518 (`0xFFEE`). Needs Yale Home and a yalexs with the capabilities.
-
-**Slot range.** The range of slots that the three actions take: **1 to 250**, or **Cloud record**, which is
-`pinSlotMin` to `pinSlotMax` from the lock's cloud record. **Cloud record** falls back to 1 to 250 when the record's
-capabilities lack either value. Needs Yale Home and a yalexs with the capabilities.
-
-**Slots 1 to 65535.** Each action takes any slot from 1 to 65535 in place of the slot range, and the status action can
-read the master code's slot. The set and clear actions refuse the master code's slot with `master_code_slot`. Needs
-nothing more.
-
-**Status answer.** The status action adds `result` to its answer, and none of these raises an error:
+**Status answer.** On for a new entry. The status action adds `result` to its answer, and none of these raises an
+error:
 
 | `result` | The lock's answer |
 |---|---|
@@ -199,15 +212,12 @@ nothing more.
 | `timeout` | no answer |
 
 `credential_exists` is `null` unless `result` is `pin` or `empty`. A connection that is not running or fails still
-raises an error. Needs nothing more.
+raises an error. Off, the status action answers as #185596's does: `credential_exists` and `name`, and a read that
+fails raises its error.
 
-**Slots in the cloud record are taken.** A set at a slot that any entry of the `pins` block of the lock's cloud record
-holds is refused with `slot_in_use`, whatever the entry's state, before anything is sent. Needs Yale Home.
-
-**Read the slot before a set.** Before a set at a slot for which this integration keeps no PIN, the action reads the
-slot from the lock and refuses the set with `slot_not_empty` when the lock answers that the slot holds a PIN. A read
-that fails fails the set, and nothing is written. A slot for which this integration keeps a PIN is written with no
-read. Needs nothing more.
+An entry made by version 0.1.0 keeps the value of **Status answer** it stored, which 0.1.0 set off for a new entry.
+Of the other five options of 0.1.0, four are now the integration's behavior and **Slots 1 to 65535** is gone, since no
+action goes past the slot range. The values such an entry stored for the five are not read.
 
 ## Where the PIN is kept
 
