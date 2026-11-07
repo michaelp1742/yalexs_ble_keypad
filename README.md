@@ -3,8 +3,9 @@
 A proof of concept, for testers, of a parallel integration to `yalexs_ble`, Home Assistant's
 [Yale Access Bluetooth](https://www.home-assistant.io/integrations/yalexs_ble/) integration. It adds three actions
 that set, clear, and read the keypad PINs of a Yale lock that Yale Access Bluetooth has loaded, and it keeps each PIN
-it sets with a name for the slot. The actions run over Yale Access Bluetooth's connection to the lock. The integration
-adds no entity and no device, and changes nothing in Yale Access Bluetooth itself. It reads nothing from the lock's
+it sets, with the slot's name when the call gives one. The actions run over Yale Access Bluetooth's connection to the
+lock. For each lock, the integration adds one event entity that records each PIN set and clear, on a device of its own
+linked to the lock's device, and it changes nothing in Yale Access Bluetooth itself. It reads nothing from the lock's
 activity log and sets no `changed_by`.
 
 The actions are the PIN actions of [home-assistant/core#185596](https://github.com/home-assistant/core/pull/185596),
@@ -14,9 +15,10 @@ The entry has one option, **Status answer**, which is on for a new entry.
 
 ## What it adds
 
-Three actions, each for admin users only. Each action targets a Yale Access Bluetooth lock entity, or a device or area
-that holds one, and ignores any other entity. A call runs once for each targeted lock, however many of the lock's
-entities it reaches. It runs the locks one after another, and the first failure ends the call.
+Three actions, each for admin users only, and the [PIN programming event](#pin-programming-event) for each lock. Each
+action targets a Yale Access Bluetooth lock entity, or a device or area that holds one, and ignores any other entity. A
+call runs once for each targeted lock, however many of the lock's entities it reaches. It runs the locks one after
+another, and the first failure ends the call.
 
 The lock's cloud record gives the rules the actions check:
 
@@ -155,6 +157,37 @@ After `pin_already_in_use`, `keycode_no_space`, `keycode_timeout`, or `keycode_s
 `masterPinSlot` is inside the slot range in use. Without the record or its capabilities, the master code's slot, 65518,
 is outside the range of 1 to 250, and `invalid_slot` refuses it first.
 
+### PIN programming event
+
+Each entry adds one event entity, such as `event.front_door_keypad_pin_programming`, named **Front Door Keypad PIN
+programming**, enabled by default. After a set or clear that the lock answered, the action writes the entity's state
+once, under the action call's context, so the set or clear appears in the logbook and in the activity of the **Front
+Door Keypad** device under the user who called the action, after the action call itself. The entity's state is the time
+of the last set or clear, and its `event_type` is one of two event types, for an `event.received` trigger or a state
+trigger:
+
+| `event_type` | Shown as | When |
+|---|---|---|
+| `pin_set` | PIN set | a set that the lock answered |
+| `pin_cleared` | PIN cleared | a clear that the lock answered |
+
+Its attributes:
+
+| Attribute | Value |
+|---|---|
+| `slot` | the slot |
+| `name` | for a set, the name the slot now has; for a clear, the name this integration kept for the slot; otherwise `null` |
+| `pin` | for a set, the PIN written; for a clear, the PIN this integration kept at the slot, else the PIN that the lock's cloud record holds at the slot, else `null` |
+
+A set or clear that fails or is stopped, and a status read, write no state. With the entity disabled, the actions run
+as they do with it enabled, and write nothing to it.
+
+Each set and clear that the lock answered also logs one line at info, whether or not the entity is enabled, such as
+`Front Door: PIN set at slot 12, named Cleaner, PIN 1234`. The line holds the slot's name when there is one, and the
+PIN in plain text when one is known, the same PIN as the entity's `pin`. Home Assistant logs it when the
+`custom_components.yalexs_ble_keypad` logger is at info or debug, such as with **Enable debug logging** on the
+integration's page.
+
 ## Requirements
 
 - Home Assistant 2026.10.0 or later.
@@ -198,10 +231,12 @@ configuration, then restart Home Assistant.
 2. Pick the lock. The list shows each lock that Yale Access Bluetooth has loaded and that has no Yale Access Bluetooth
    Keypad entry yet.
 
-The entry takes the title of the lock's Yale Access Bluetooth entry, starts with **Status answer** on, and adds no
-entity.
+The entry takes the title of the lock's Yale Access Bluetooth entry and starts with **Status answer** on. It adds a
+device named after the lock, such as **Front Door Keypad**, which the lock's device lists under **Linked devices**, with
+one entity, the [PIN programming event](#pin-programming-event).
 When Yale Access Bluetooth reloads or unloads the lock's entry, this entry reloads, and it sets up again once Yale
-Access Bluetooth has loaded the lock. Removing the entry deletes the PINs and names it keeps; the PINs stay on the lock.
+Access Bluetooth has loaded the lock. Removing the entry deletes the PINs and names it keeps, its device, and its
+entity; the PINs stay on the lock.
 
 ## The option
 
@@ -235,6 +270,14 @@ action goes past the slot range. The values such an entry stored for the five ar
   PIN of each set is therefore in the database in plain text until the recorder purges the event, after 10 days by
   default (`purge_keep_days`), and in each backup that includes the database. A recorder `exclude` of the event type
   `call_service` keeps every action call out of the database.
+- The PIN programming event holds the PIN of each set, and of each clear whose PIN this integration kept or the lock's
+  cloud record holds, in its `pin` attribute, in plain text. The recorder keeps each of the entity's states with its
+  attributes in its database, so the PIN is in the entity's history until the recorder purges the state, and in each
+  backup that includes the database. A recorder `exclude` of the entity keeps its states out of the database. Home
+  Assistant also keeps the entity's last state, with its attributes, in `.storage/core.restore_state`, so the last PIN
+  is in that file and in each backup.
+- The info line of each set and clear holds the same PIN in plain text, in the Home Assistant log when the integration's
+  logger is at info or debug.
 - With **Status answer** on, the status action's response holds the PIN of the slot it reads, so the PIN is in any
   automation or script variable that holds the response, and in a trace that records it.
 - With the `yalexs_ble` logger at debug, yalexs-ble logs each frame it receives from the lock, decrypted, in
