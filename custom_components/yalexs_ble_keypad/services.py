@@ -259,15 +259,24 @@ async def _async_set_credential(
             translation_key="slot_in_use",
             translation_placeholders={"slot": str(slot)},
         )
-    if pins.get(slot) is None:
-        with _translate_keycode_errors():
-            occupied = await entry.runtime_data.lock.get_keycode(slot) is not None
-        if occupied:
+    with _translate_keycode_errors():
+        held = await entry.runtime_data.lock.get_keycode(slot)
+    if (kept := pins.get(slot)) is None:
+        if held is not None:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="slot_not_empty",
                 translation_placeholders={"slot": str(slot)},
             )
+    # The PIN being set passes, so that a set retried after one that stopped
+    # partway is not refused for its own PIN.
+    elif held not in (None, kept.pin, pin):
+        await pins.async_remove(slot)
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="slot_holds_other_pin",
+            translation_placeholders={"slot": str(slot)},
+        )
     try:
         with _translate_keycode_errors():
             await entry.runtime_data.lock.set_keycode(slot, pin)

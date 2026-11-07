@@ -9,9 +9,8 @@ activity log and sets no `changed_by`.
 
 The actions are the PIN actions of [home-assistant/core#185596](https://github.com/home-assistant/core/pull/185596),
 with its action names, fields, and admin rule, in an integration of their own. The actions check a slot and a PIN
-against the lock's cloud record, as the Yale Home integration holds it, and a set at a slot for which this integration
-keeps no PIN reads the slot from the lock first. The entry has one option, **Status answer**, which is on for a new
-entry.
+against the lock's cloud record, as the Yale Home integration holds it, and a set reads the slot from the lock first.
+The entry has one option, **Status answer**, which is on for a new entry.
 
 ## What it adds
 
@@ -52,17 +51,21 @@ Before anything is sent to the lock, the action refuses:
 - a slot that any entry of the `pins` block of the lock's cloud record holds, whatever the entry's state
   (`slot_in_use`).
 
-At a slot for which this integration keeps no PIN, the action then reads the slot from the lock with yalexs-ble's
-`get_keycode`, and refuses the set with `slot_not_empty` when the lock answers that the slot holds a PIN. This finds a
-PIN the record does not show, such as one added in the Yale Home app since Yale Home last fetched the record. A read
-that fails fails the set, and nothing is written. A slot for which this integration keeps a PIN is written with no
-read, so a set replaces that PIN in place.
+The action then reads the slot from the lock with yalexs-ble's `get_keycode`. At a slot for which this integration keeps
+no PIN, it refuses the set with `slot_not_empty` when the lock answers that the slot holds a PIN. This finds a PIN the
+record does not show, such as one added in the Yale Home app since Yale Home last fetched the record. At a slot for
+which this integration keeps a PIN, the set goes on when the slot is empty, holds that PIN, or holds the PIN being set,
+so a set replaces that PIN in place, and a set retried after one that stopped partway is not refused for its own PIN.
+When the slot holds any other PIN, the action refuses the set with `slot_holds_other_pin` and drops the slot's record,
+since the slot no longer holds the PIN this integration wrote. A read that fails fails the set, nothing is written, and
+the slot's record stays as it was.
 
 The action then writes the PIN with yalexs-ble's `set_keycode`, which clears the slot and then writes the PIN, valid
 at all times. When the lock has answered every step, the integration keeps the PIN and the slot's name.
 
-When the set fails with `lock_not_running`, or because the lock refused the clear that starts the set, the
-integration keeps the slot's record. On any other failure, and when the call is cancelled, it drops the record.
+When the write fails with `lock_not_running`, or because the lock refused the clear that starts the set, the integration
+keeps the slot's record. On any other failure of the write, and when the call is cancelled while the write runs, it
+drops the record.
 
 ### Clear lock credential
 
@@ -134,6 +137,7 @@ These come from the lock or the connection:
 | Key | When |
 |---|---|
 | `slot_not_empty` | the read before a set found a PIN at a slot where this integration keeps none; nothing is written |
+| `slot_holds_other_pin` | the read before a set found a PIN other than the one this integration keeps at the slot, and other than the PIN being set; nothing is written, and the slot's record is dropped |
 | `pin_already_in_use` | the lock answered `KEYCODE_EXISTING_KEY` (`0x06`) to a step of a set after its clear |
 | `keycode_no_space` | the lock answered `KEYCODE_NOSPACE` (`0x07`) to a step of a set after its clear |
 | `keycode_timeout` | the lock answered `KEYCODE_TIMEOUT` (`0x08`) to a step of a set after its clear |

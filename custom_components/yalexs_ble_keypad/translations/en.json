@@ -64,6 +64,9 @@
     "pin_in_use": {
       "message": "This PIN is already assigned to slot {slot}. Nothing was sent to the lock."
     },
+    "slot_holds_other_pin": {
+      "message": "The lock answered that slot {slot} holds a PIN other than the one this integration wrote there. Nothing was written to the lock, and this integration no longer keeps a PIN for that slot."
+    },
     "slot_in_use": {
       "message": "Slot {slot} is assigned to a PIN in the lock's cloud record. Nothing was sent to the lock."
     },

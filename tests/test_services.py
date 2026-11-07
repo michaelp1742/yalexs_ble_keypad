@@ -1292,20 +1292,108 @@ async def test_set_refuses_a_slot_that_holds_a_pin(
         )
     ],
 )
-async def test_set_reads_an_empty_slot_and_skips_a_kept_slot(
+async def test_set_reads_the_slot_before_each_write(
     hass: HomeAssistant, mock_lock: MockLock
 ) -> None:
-    """A set at an empty slot is read then written, and a second set at that slot, now in the store, is written with no read, on an entry that stored occupancy_cloud_pins and occupancy_read off."""
+    """A set at an empty slot is read then written, and a second set at that slot, now in the store, is written after a read that answers the kept PIN, on an entry that stored occupancy_cloud_pins and occupancy_read off."""
     await _set_guest(hass)
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(3, "4321")
     mock_lock.push_lock.get_keycode.reset_mock()
     mock_lock.push_lock.set_keycode.reset_mock()
+    mock_lock.push_lock.get_keycode.return_value = "4321"
 
     await _call(
         hass,
         "set_lock_credential",
         {"credential_data": "8765", "credential_index": 3},
     )
-    mock_lock.push_lock.get_keycode.assert_not_awaited()
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(3, "8765")
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    "answer",
+    [
+        pytest.param(None, id="empty"),
+        pytest.param("4321", id="kept_pin"),
+        pytest.param("8765", id="pin_being_set"),
+    ],
+)
+async def test_set_at_a_kept_slot_writes_when_the_read_answers_empty_or_either_pin(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
+    answer: str | None,
+) -> None:
+    """A set at a slot the store holds is written after one read that answers an empty slot, the kept PIN, or the PIN being set."""
+    await _set_guest(hass)
+    mock_lock.push_lock.get_keycode.reset_mock()
+    mock_lock.push_lock.set_keycode.reset_mock()
+    mock_lock.push_lock.get_keycode.return_value = answer
+
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "8765", "credential_index": 3},
+    )
+
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(3, "8765")
+    assert _stored_pins(hass_storage, entry) == {"3": {"pin": "8765", "name": "Guest"}}
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    ("read", "exception", "translation_key", "placeholders", "expected"),
+    [
+        pytest.param(
+            ["975310"],
+            ServiceValidationError,
+            "slot_holds_other_pin",
+            {"slot": "3"},
+            {},
+            id="other_pin",
+        ),
+        pytest.param(
+            KeycodeError("get_keycode", OperationError.NACK),
+            HomeAssistantError,
+            "keycode_error",
+            {"error": str(KeycodeError("get_keycode", OperationError.NACK))},
+            GUEST,
+            id="read_refused",
+        ),
+    ],
+)
+async def test_set_at_a_kept_slot_is_refused_after_the_read(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
+    read: list[str] | Exception,
+    exception: type[HomeAssistantError],
+    translation_key: str,
+    placeholders: dict[str, str],
+    expected: dict[str, dict[str, str | None]],
+) -> None:
+    """A set at a slot the store holds writes nothing when the read answers another PIN, which drops the record, or is refused, which keeps it."""
+    await _set_guest(hass)
+    mock_lock.push_lock.get_keycode.reset_mock()
+    mock_lock.push_lock.set_keycode.reset_mock()
+    mock_lock.push_lock.get_keycode.side_effect = read
+
+    with pytest.raises(exception) as exc_info:
+        await _call(
+            hass,
+            "set_lock_credential",
+            {"credential_data": "8765", "credential_index": 3},
+        )
+
+    assert type(exc_info.value) is exception
+    assert exc_info.value.translation_key == translation_key
+    assert exc_info.value.translation_placeholders == placeholders
+    mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
+    mock_lock.push_lock.set_keycode.assert_not_awaited()
+    assert _stored_pins(hass_storage, entry) == expected
