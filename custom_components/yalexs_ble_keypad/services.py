@@ -32,8 +32,6 @@ from homeassistant.helpers.target import (
 
 from .cloud import CloudPin, LockPinParameters, lock_pin_parameters
 from .const import (
-    CONF_OCCUPANCY_CLOUD_PINS,
-    CONF_OCCUPANCY_READ,
     CONF_STATUS_RESULT,
     CREDENTIAL_TYPE_PIN,
     DOMAIN,
@@ -236,7 +234,6 @@ async def _async_set_credential(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> None:
     """Set a keypad PIN on the entry's lock."""
-    options = entry_options(entry)
     parameters = lock_pin_parameters(hass, entry.runtime_data.address)
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
@@ -256,15 +253,13 @@ async def _async_set_credential(
     # Every state counts: the lock holds the PIN of each entry but a created
     # one until the app's next sync acts on it, and a created entry is loaded
     # at that sync.
-    if options[CONF_OCCUPANCY_CLOUD_PINS] and any(
-        cloud_pin.slot == slot for cloud_pin in parameters.cloud_pins
-    ):
+    if any(cloud_pin.slot == slot for cloud_pin in parameters.cloud_pins):
         raise ServiceValidationError(
             translation_domain=DOMAIN,
             translation_key="slot_in_use",
             translation_placeholders={"slot": str(slot)},
         )
-    if options[CONF_OCCUPANCY_READ] and pins.get(slot) is None:
+    if pins.get(slot) is None:
         with _translate_keycode_errors():
             occupied = await entry.runtime_data.lock.get_keycode(slot) is not None
         if occupied:
@@ -318,12 +313,11 @@ async def _async_credential_status(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
 ) -> dict[str, bool | str | None]:
     """Read a keypad PIN slot from the entry's lock."""
-    options = entry_options(entry)
     parameters = lock_pin_parameters(hass, entry.runtime_data.address)
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot, parameters)
-    if options[CONF_STATUS_RESULT]:
+    if entry_options(entry)[CONF_STATUS_RESULT]:
         return await _async_slot_result(entry, slot)
     with _translate_keycode_errors():
         exists = await entry.runtime_data.lock.get_keycode(slot) is not None

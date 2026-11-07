@@ -1206,6 +1206,7 @@ async def test_status_result_returns_the_slots_result_without_raising(
 ) -> None:
     """With the status answer at its default, the status action returns the slot's result and raises no error for a refusal, a malformed PIN field, or no answer."""
     await _set_guest(hass)
+    mock_lock.push_lock.get_keycode.reset_mock()
     mock_lock.push_lock.get_keycode.side_effect = side_effect
 
     response = await _call(
@@ -1220,11 +1221,18 @@ async def test_status_result_returns_the_slots_result_without_raising(
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", [{"occupancy_cloud_pins": True}])
-async def test_occupancy_cloud_pins_refuses_a_slot_in_the_pins_block(
+@pytest.mark.parametrize(
+    "options",
+    [
+        pytest.param(
+            {"occupancy_cloud_pins": False, "occupancy_read": False}, id="stored_off"
+        )
+    ],
+)
+async def test_set_refuses_a_slot_in_the_pins_block(
     hass: HomeAssistant, mock_lock: MockLock
 ) -> None:
-    """With the cloud record's slots taken, a set at a slot that a created entry of the pins block holds is refused before any frame."""
+    """A set at a slot that a created entry of the pins block holds is refused before any frame, on an entry that stored occupancy_cloud_pins and occupancy_read off."""
     # A constructed pins block with one entry in the created state, the one state whose PIN is not yet on the lock.
     record = {
         **FRONT_DOOR_RECORD,
@@ -1244,15 +1252,23 @@ async def test_occupancy_cloud_pins_refuses_a_slot_in_the_pins_block(
         )
     assert exc_info.value.translation_key == "slot_in_use"
     assert exc_info.value.translation_placeholders == {"slot": "100"}
+    mock_lock.push_lock.get_keycode.assert_not_awaited()
     mock_lock.push_lock.set_keycode.assert_not_awaited()
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", [{"occupancy_read": True}])
-async def test_occupancy_read_refuses_a_slot_that_holds_a_pin(
+@pytest.mark.parametrize(
+    "options",
+    [
+        pytest.param(
+            {"occupancy_cloud_pins": False, "occupancy_read": False}, id="stored_off"
+        )
+    ],
+)
+async def test_set_refuses_a_slot_that_holds_a_pin(
     hass: HomeAssistant, mock_lock: MockLock
 ) -> None:
-    """With the read before a set on, a set at a slot the store does not hold is refused when the lock answers with a PIN, after one read and no write."""
+    """A set at a slot the store does not hold is refused when the lock answers with a PIN, after one read and no write, on an entry that stored occupancy_cloud_pins and occupancy_read off."""
     mock_lock.push_lock.get_keycode.return_value = "975310"
 
     with pytest.raises(ServiceValidationError) as exc_info:
@@ -1268,11 +1284,18 @@ async def test_occupancy_read_refuses_a_slot_that_holds_a_pin(
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", [{"occupancy_read": True}])
-async def test_occupancy_read_reads_an_empty_slot_and_skips_a_kept_slot(
+@pytest.mark.parametrize(
+    "options",
+    [
+        pytest.param(
+            {"occupancy_cloud_pins": False, "occupancy_read": False}, id="stored_off"
+        )
+    ],
+)
+async def test_set_reads_an_empty_slot_and_skips_a_kept_slot(
     hass: HomeAssistant, mock_lock: MockLock
 ) -> None:
-    """With the read before a set on, a set at an empty slot is read then written, and a second set at that slot, now in the store, is written with no read."""
+    """A set at an empty slot is read then written, and a second set at that slot, now in the store, is written with no read, on an entry that stored occupancy_cloud_pins and occupancy_read off."""
     await _set_guest(hass)
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(3, "4321")

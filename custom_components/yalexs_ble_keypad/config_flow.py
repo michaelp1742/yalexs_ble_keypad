@@ -19,13 +19,7 @@ from homeassistant.helpers.selector import (
 )
 
 from . import async_loaded_owners
-from .const import (
-    CONF_OCCUPANCY_CLOUD_PINS,
-    CONF_OCCUPANCY_READ,
-    CONF_STATUS_RESULT,
-    DEFAULT_OPTIONS,
-    DOMAIN,
-)
+from .const import CONF_STATUS_RESULT, DEFAULT_OPTIONS, DOMAIN
 from .models import entry_options
 
 
@@ -103,13 +97,6 @@ class OptionsFlowHandler(OptionsFlowWithReload):
                 {
                     probatio.Required(
                         CONF_STATUS_RESULT, default=options[CONF_STATUS_RESULT]
-                    ): bool,
-                    probatio.Required(
-                        CONF_OCCUPANCY_CLOUD_PINS,
-                        default=options[CONF_OCCUPANCY_CLOUD_PINS],
-                    ): bool,
-                    probatio.Required(
-                        CONF_OCCUPANCY_READ, default=options[CONF_OCCUPANCY_READ]
                     ): bool,
                 }
             ),
