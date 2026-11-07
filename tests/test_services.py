@@ -2,6 +2,7 @@
 
 import asyncio
 from copy import deepcopy
+import logging
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1568,7 +1569,8 @@ async def test_set_with_the_event_disabled_records_nothing(
     entry: MockConfigEntry,
     hass_storage: dict[str, Any],
 ) -> None:
-    """A set with the programming event disabled in the registry stores the PIN, writes no state, and triggers no update of the disabled entity."""
+    """A set with the programming event disabled in the registry stores the PIN, logs it, writes no state, and triggers no update of the disabled entity."""
+    caplog.set_level(logging.INFO, logger="custom_components.yalexs_ble_keypad")
     entity_registry.async_update_entity(
         EVENT_ENTITY_ID, disabled_by=er.RegistryEntryDisabler.USER
     )
@@ -1587,3 +1589,56 @@ async def test_set_with_the_event_disabled_records_nothing(
     }
     assert hass.states.get(EVENT_ENTITY_ID) is None
     assert "incorrectly being triggered" not in caplog.text
+    assert "Front Door: PIN set at slot 12, named Cleaner, PIN 1234" in caplog.text
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    ("service", "data", "message"),
+    [
+        pytest.param(
+            "set_lock_credential",
+            {"credential_data": "1234", "credential_index": 12, "name": "Cleaner"},
+            "Front Door: PIN set at slot 12, named Cleaner, PIN 1234",
+            id="set_named",
+        ),
+        pytest.param(
+            "set_lock_credential",
+            {"credential_data": "1234", "credential_index": 12},
+            "Front Door: PIN set at slot 12, PIN 1234",
+            id="set_unnamed",
+        ),
+        pytest.param(
+            "clear_lock_credential",
+            {"credential_index": 3},
+            "Front Door: PIN cleared at slot 3, named Guest, PIN 4321",
+            id="clear_named",
+        ),
+        pytest.param(
+            "clear_lock_credential",
+            {"credential_index": 30},
+            "Front Door: PIN cleared at slot 30",
+            id="clear_no_record",
+        ),
+    ],
+)
+async def test_set_and_clear_log_the_pin_at_info(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    service: str,
+    data: dict[str, Any],
+    message: str,
+) -> None:
+    """A set or clear the lock answered logs one info line with the lock's title, the slot, the name when there is one, and the PIN when one is known."""
+    await _set_guest(hass)
+    caplog.clear()
+    caplog.set_level(logging.INFO, logger="custom_components.yalexs_ble_keypad")
+
+    await _call(hass, service, data)
+
+    assert [
+        (record.levelno, record.getMessage())
+        for record in caplog.records
+        if record.name == "custom_components.yalexs_ble_keypad.services"
+        and record.levelno >= logging.INFO
+    ] == [(logging.INFO, message)]

@@ -61,6 +61,8 @@ _REFUSAL_KEYS: dict[OperationError | int, str] = {
     OperationError.KEYCODE_SLOT_IN_USE: "keycode_slot_in_use",
 }
 
+_PROGRAMMING_LOG_TEXTS = {EVENT_PIN_SET: "PIN set", EVENT_PIN_CLEARED: "PIN cleared"}
+
 _CREDENTIAL_TYPE = probatio.Required(YaleXSBLEKeypadServiceArgument.CREDENTIAL_TYPE)
 _CREDENTIAL_INDEX = probatio.Required(YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX)
 
@@ -240,6 +242,28 @@ def _cloud_pin_at(slot: int, cloud_pins: tuple[CloudPin, ...]) -> str | None:
     )
 
 
+@callback
+def _async_record_programming(
+    entry: YaleXSBLEKeypadConfigEntry,
+    context: Context,
+    event_type: str,
+    slot: int,
+    name: str | None,
+    pin: str | None,
+) -> None:
+    """Log a PIN set or clear, and write it to the programming event while that entity is added."""
+    _LOGGER.info(
+        "%s: %s at slot %s%s%s",
+        entry.runtime_data.title,
+        _PROGRAMMING_LOG_TEXTS[event_type],
+        slot,
+        f", named {name}" if name else "",
+        f", PIN {pin}" if pin else "",
+    )
+    if (event := entry.runtime_data.programming_event) is not None:
+        event.async_record(context, event_type, slot, name, pin)
+
+
 async def _async_set_credential(
     hass: HomeAssistant,
     entry: YaleXSBLEKeypadConfigEntry,
@@ -305,8 +329,7 @@ async def _async_set_credential(
         pin=pin, name=data.get(YaleXSBLEKeypadServiceArgument.NAME) or None
     )
     await pins.async_set(slot, stored)
-    if (event := entry.runtime_data.programming_event) is not None:
-        event.async_record(context, EVENT_PIN_SET, slot, stored.name, pin)
+    _async_record_programming(entry, context, EVENT_PIN_SET, slot, stored.name, pin)
 
 
 async def _async_clear_credential(
@@ -335,14 +358,14 @@ async def _async_clear_credential(
         await pins.async_remove(slot)
         raise
     await pins.async_remove(slot)
-    if (event := entry.runtime_data.programming_event) is not None:
-        event.async_record(
-            context,
-            EVENT_PIN_CLEARED,
-            slot,
-            stored.name if stored else None,
-            stored.pin if stored else _cloud_pin_at(slot, parameters.cloud_pins),
-        )
+    _async_record_programming(
+        entry,
+        context,
+        EVENT_PIN_CLEARED,
+        slot,
+        stored.name if stored else None,
+        stored.pin if stored else _cloud_pin_at(slot, parameters.cloud_pins),
+    )
 
 
 async def _async_credential_status(
