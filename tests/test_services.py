@@ -1036,60 +1036,108 @@ async def test_slot_range_from_the_record(
     mock_lock.push_lock.set_keycode.assert_awaited_once()
 
 
-# The master code's slot in the Front Door's record is 65518.
-FIELD_WIDTH_OPTIONS = [pytest.param({"slot_field_width": True}, id="field_width")]
-
-
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", FIELD_WIDTH_OPTIONS)
 @pytest.mark.parametrize(
-    ("slot", "key"),
+    "options", [pytest.param({"slot_field_width": True}, id="stored_field_width")]
+)
+@pytest.mark.parametrize(
+    ("service", "data", "extra", "method"),
     [
-        pytest.param(0, "invalid_slot", id="slot_0"),
-        pytest.param(65518, "master_code_slot", id="master_slot"),
+        pytest.param(
+            "set_lock_credential",
+            {"credential_data": "123456", "credential_index": 0},
+            {},
+            "set_keycode",
+            id="set_slot_0",
+        ),
+        pytest.param(
+            "get_lock_credential_status",
+            {"credential_index": 101},
+            {"return_response": True},
+            "get_keycode",
+            id="status_past_the_top",
+        ),
+        pytest.param(
+            "clear_lock_credential",
+            {"credential_index": 101},
+            {},
+            "clear_keycode",
+            id="clear_past_the_top",
+        ),
+        pytest.param(
+            "get_lock_credential_status",
+            {"credential_index": 65518},
+            {"return_response": True},
+            "get_keycode",
+            id="status_master_code_slot",
+        ),
+        pytest.param(
+            "set_lock_credential",
+            {"credential_data": "123456", "credential_index": 65518},
+            {},
+            "set_keycode",
+            id="set_master_code_slot",
+        ),
     ],
 )
-async def test_field_width_refuses_slot_0_and_a_set_at_the_master_slot(
+async def test_every_action_refuses_a_slot_outside_the_record_range(
     hass: HomeAssistant,
     mock_lock: MockLock,
-    slot: int,
-    key: str,
+    service: str,
+    data: dict[str, Any],
+    extra: dict[str, Any],
+    method: str,
 ) -> None:
-    """With the slot field width option on, a set at slot 0 or at the master code's slot is refused before any frame."""
+    """A slot outside the record's range, the master code's slot included, is refused with the range before any frame, whatever slot_field_width value the entry stored."""
     await async_setup_cloud(
         hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
     )
 
     with pytest.raises(ServiceValidationError) as exc_info:
-        await _call(
-            hass,
-            "set_lock_credential",
-            {"credential_data": "123456", "credential_index": slot},
-        )
-    assert exc_info.value.translation_key == key
-    mock_lock.push_lock.set_keycode.assert_not_awaited()
+        await _call(hass, service, data, **extra)
+    assert exc_info.value.translation_key == "invalid_slot"
+    assert exc_info.value.translation_placeholders == {"min": "1", "max": "100"}
+    getattr(mock_lock.push_lock, method).assert_not_awaited()
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", FIELD_WIDTH_OPTIONS)
-@pytest.mark.parametrize("slot", [255, 65518])
-async def test_field_width_lets_the_status_read_past_the_range(
-    hass: HomeAssistant, mock_lock: MockLock, slot: int
+@pytest.mark.parametrize(
+    ("service", "data", "method"),
+    [
+        pytest.param(
+            "set_lock_credential",
+            {"credential_data": "123456", "credential_index": 100},
+            "set_keycode",
+            id="set",
+        ),
+        pytest.param(
+            "clear_lock_credential",
+            {"credential_index": 100},
+            "clear_keycode",
+            id="clear",
+        ),
+    ],
+)
+async def test_set_and_clear_refuse_the_master_code_slot_inside_the_range(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    service: str,
+    data: dict[str, Any],
+    method: str,
 ) -> None:
-    """With the slot field width option on, the status action reads a slot past the lock's range and the master code's slot."""
+    """A set or clear at a masterPinSlot inside the record's range is refused with master_code_slot before any frame."""
+    # No record on file puts masterPinSlot inside its slot range, so this record is constructed with the master code's slot at its top slot.
     await async_setup_cloud(
-        hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
-    )
-
-    response = await _call(
         hass,
-        "get_lock_credential_status",
-        {"credential_index": slot},
-        return_response=True,
+        [FRONT_DOOR_RECORD],
+        {"front": {"lock": {**FRONT_DOOR_CAPABILITIES["lock"], "masterPinSlot": 100}}},
     )
 
-    mock_lock.push_lock.get_keycode.assert_awaited_once_with(slot)
-    assert response == {ENTITY_ID: {"credential_exists": False, "name": None}}
+    with pytest.raises(ServiceValidationError) as exc_info:
+        await _call(hass, service, data)
+    assert exc_info.value.translation_key == "master_code_slot"
+    assert exc_info.value.translation_placeholders == {"slot": "100"}
+    getattr(mock_lock.push_lock, method).assert_not_awaited()
 
 
 @pytest.mark.usefixtures("entry")

@@ -22,7 +22,6 @@ from . import async_loaded_owners
 from .const import (
     CONF_OCCUPANCY_CLOUD_PINS,
     CONF_OCCUPANCY_READ,
-    CONF_SLOT_FIELD_WIDTH,
     CONF_STATUS_RESULT,
     DEFAULT_OPTIONS,
     DOMAIN,
@@ -102,9 +101,6 @@ class OptionsFlowHandler(OptionsFlowWithReload):
             step_id="init",
             data_schema=probatio.Schema(
                 {
-                    probatio.Required(
-                        CONF_SLOT_FIELD_WIDTH, default=options[CONF_SLOT_FIELD_WIDTH]
-                    ): bool,
                     probatio.Required(
                         CONF_STATUS_RESULT, default=options[CONF_STATUS_RESULT]
                     ): bool,

@@ -77,13 +77,11 @@
         "data": {
           "occupancy_cloud_pins": "Slots in the cloud record are taken",
           "occupancy_read": "Read the slot before a set",
-          "slot_field_width": "Slots 1 to 65535",
           "status_result": "Status answer"
         },
         "data_description": {
           "occupancy_cloud_pins": "Refuses a set at a slot that an entry of the pins block of the lock's cloud record holds, whatever the entry's state, before anything is sent to the lock.",
           "occupancy_read": "Reads the slot from the lock before a set at a slot this integration has no record of, and refuses the set when the lock answers with a PIN. A slot this integration has a record of is written with no read.",
-          "slot_field_width": "Lets each action take any slot from 1 to 65535 in place of the slot range, and lets the status action read the master code's slot. The set and clear actions still refuse the master code's slot.",
           "status_result": "Adds result to the status action's answer: pin, empty, the name of the lock's refusal, malformed, or timeout. None of these raises an error. credential_exists is null unless the result is pin or empty."
         }
       }
