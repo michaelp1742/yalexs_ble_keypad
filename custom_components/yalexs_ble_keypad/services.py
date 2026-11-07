@@ -340,11 +340,12 @@ async def _async_credential_status(
 async def _async_slot_result(
     entry: YaleXSBLEKeypadConfigEntry, slot: int
 ) -> dict[str, bool | str | None]:
-    """Read a keypad PIN slot and return its result.
+    """Read a keypad PIN slot and return its result and the PIN the lock returned.
 
     A refusal, a malformed PIN field, or no answer is a result, not an error.
     """
     exists: bool | None = None
+    pin: str | None = None
     with _translate_keycode_errors():
         try:
             pin = await entry.runtime_data.lock.get_keycode(slot)
@@ -367,6 +368,7 @@ async def _async_slot_result(
         "credential_exists": exists,
         "name": stored.name if stored else None,
         "result": result,
+        "pin": pin,
     }
 
 
@@ -389,7 +391,7 @@ async def async_clear_lock_credential(call: ServiceCall) -> None:
 
 
 async def async_get_lock_credential_status(call: ServiceCall) -> ServiceResponse:
-    """Return whether a keypad PIN slot of each targeted lock is in use, never the PIN itself."""
+    """Return the status of a keypad PIN slot of each targeted lock."""
     hass = call.hass
     response: dict[str, Any] = {}
     for entry_id, entity_ids in _async_target_entries(hass, call).items():

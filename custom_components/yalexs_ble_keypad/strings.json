@@ -81,7 +81,7 @@
           "status_result": "Status answer"
         },
         "data_description": {
-          "status_result": "Adds result to the status action's answer: pin, empty, the name of the lock's refusal, malformed, or timeout. None of these raises an error. credential_exists is null unless the result is pin or empty."
+          "status_result": "Adds result and pin to the status action's answer. result is pin, empty, the name of the lock's refusal, malformed, or timeout, and none of these raises an error. pin is the PIN the lock returned, or null when the slot is empty or the read failed. credential_exists is null unless the result is pin or empty."
         }
       }
     }
@@ -102,7 +102,7 @@
       "name": "Clear lock credential"
     },
     "get_lock_credential_status": {
-      "description": "Returns whether a keypad PIN slot is in use and its name. The PIN itself is never returned.",
+      "description": "Returns whether a keypad PIN slot is in use and its name. With the Status answer option on, the answer also holds the PIN the lock returned.",
       "fields": {
         "credential_index": {
           "description": "The keypad PIN slot.",

@@ -190,7 +190,12 @@ async def test_reload_keeps_stored_pins(
 
     assert entry.state is ConfigEntryState.LOADED
     assert response == {
-        ENTITY_ID: {"credential_exists": True, "name": "Cleaner", "result": "pin"}
+        ENTITY_ID: {
+            "credential_exists": True,
+            "name": "Cleaner",
+            "result": "pin",
+            "pin": "1234",
+        }
     }
     assert hass_storage[STORAGE_KEY.format(entry.entry_id)] == stored
 
@@ -232,7 +237,12 @@ async def test_set_credential_without_name_stores_no_name(
 
     assert _stored_pins(hass_storage, entry) == {"5": {"pin": "5678", "name": None}}
     assert response == {
-        ENTITY_ID: {"credential_exists": True, "name": None, "result": "pin"}
+        ENTITY_ID: {
+            "credential_exists": True,
+            "name": None,
+            "result": "pin",
+            "pin": "5678",
+        }
     }
 
 
@@ -260,7 +270,12 @@ async def test_set_credential_empty_name_on_empty_slot_stores_no_name(
 
     assert _stored_pins(hass_storage, entry) == {"5": {"pin": "5678", "name": None}}
     assert response == {
-        ENTITY_ID: {"credential_exists": True, "name": None, "result": "pin"}
+        ENTITY_ID: {
+            "credential_exists": True,
+            "name": None,
+            "result": "pin",
+            "pin": "5678",
+        }
     }
 
 
@@ -738,7 +753,12 @@ async def test_device_target_status_shared(
     )
 
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(9)
-    expected = {"credential_exists": True, "name": None, "result": "pin"}
+    expected = {
+        "credential_exists": True,
+        "name": None,
+        "result": "pin",
+        "pin": "4321",
+    }
     assert response == {ENTITY_ID: expected, SECURE_ENTITY_ID: expected}
 
 
@@ -790,11 +810,13 @@ async def test_parallel_status_different_slots_both_run(
         "credential_exists": True,
         "name": None,
         "result": "pin",
+        "pin": "1234",
     }
     assert second[ENTITY_ID] == {
         "credential_exists": False,
         "name": None,
         "result": "empty",
+        "pin": None,
     }
 
 
@@ -1184,38 +1206,63 @@ async def test_set_and_clear_refuse_the_master_code_slot_inside_the_range(
     [
         pytest.param(
             ["4321"],
-            {"credential_exists": True, "name": "Guest", "result": "pin"},
+            {
+                "credential_exists": True,
+                "name": "Guest",
+                "result": "pin",
+                "pin": "4321",
+            },
             id="pin",
         ),
         pytest.param(
             [None],
-            {"credential_exists": False, "name": None, "result": "empty"},
+            {
+                "credential_exists": False,
+                "name": None,
+                "result": "empty",
+                "pin": None,
+            },
             id="empty",
         ),
         pytest.param(
             KeycodeError("get_keycode", OperationError.KEYCODE_NOSPACE),
-            {"credential_exists": None, "name": None, "result": "KEYCODE_NOSPACE"},
+            {
+                "credential_exists": None,
+                "name": None,
+                "result": "KEYCODE_NOSPACE",
+                "pin": None,
+            },
             id="refusal",
         ),
         pytest.param(
             ValueError("Malformed PIN field"),
-            {"credential_exists": None, "name": None, "result": "malformed"},
+            {
+                "credential_exists": None,
+                "name": None,
+                "result": "malformed",
+                "pin": None,
+            },
             id="malformed",
         ),
         pytest.param(
             TimeoutError("The lock did not answer get_keycode"),
-            {"credential_exists": None, "name": None, "result": "timeout"},
+            {
+                "credential_exists": None,
+                "name": None,
+                "result": "timeout",
+                "pin": None,
+            },
             id="timeout",
         ),
     ],
 )
-async def test_status_result_returns_the_slots_result_without_raising(
+async def test_status_result_returns_the_slots_result_and_pin_without_raising(
     hass: HomeAssistant,
     mock_lock: MockLock,
     side_effect: Any,
     expected: dict[str, bool | str | None],
 ) -> None:
-    """With the status answer at its default, the status action returns the slot's result and raises no error for a refusal, a malformed PIN field, or no answer."""
+    """With the status answer at its default, the status action returns the slot's result and the PIN the lock returned, and raises no error for a refusal, a malformed PIN field, or no answer."""
     await _set_guest(hass)
     mock_lock.push_lock.get_keycode.reset_mock()
     mock_lock.push_lock.get_keycode.side_effect = side_effect

@@ -106,6 +106,7 @@ lock.front_door:
   credential_exists: true
   name: Cleaner
   result: pin
+  pin: "482916"
 ```
 
 | Key | Value |
@@ -113,9 +114,10 @@ lock.front_door:
 | `credential_exists` | `true` when the lock answers that the slot holds a PIN, `false` when the slot is empty, and `null` when **Status answer** is on and `result` is neither `pin` nor `empty` |
 | `name` | the name this integration keeps for the slot when the slot holds a PIN, otherwise `null` |
 | `result` | with **Status answer** on: the result of the read, as in the table under [The option](#the-option) |
+| `pin` | with **Status answer** on: the PIN the lock returned for the slot, or `null` when the slot is empty or the read failed |
 
-The response never holds the PIN. With **Status answer** off, the response has no `result`, `credential_exists` is
-`true` or `false`, and a read that fails raises its error.
+With **Status answer** off, the response has no `result` and no `pin`, and never holds the PIN. `credential_exists`
+is `true` or `false`, and a read that fails raises its error.
 
 ### Errors
 
@@ -205,8 +207,8 @@ Access Bluetooth has loaded the lock. Removing the entry deletes the PINs and na
 
 The option is in the entry's options, and a change reloads the entry.
 
-**Status answer.** On for a new entry. The status action adds `result` to its answer, and none of these raises an
-error:
+**Status answer.** On for a new entry. The status action adds `result` and `pin` to its answer. `pin` is the PIN the
+lock returned, or `null` when `result` is not `pin`. `result` is one of these, and none of them raises an error:
 
 | `result` | The lock's answer |
 |---|---|
@@ -217,8 +219,8 @@ error:
 | `timeout` | no answer |
 
 `credential_exists` is `null` unless `result` is `pin` or `empty`. A connection that is not running or fails still
-raises an error. Off, the status action answers as #185596's does: `credential_exists` and `name`, and a read that
-fails raises its error.
+raises an error. Off, the status action answers as #185596's does: `credential_exists` and `name`, never the PIN, and
+a read that fails raises its error.
 
 An entry made by version 0.1.0 keeps the value of **Status answer** it stored, which 0.1.0 set off for a new entry.
 Of the other five options of 0.1.0, four are now the integration's behavior and **Slots 1 to 65535** is gone, since no
@@ -233,6 +235,8 @@ action goes past the slot range. The values such an entry stored for the five ar
   PIN of each set is therefore in the database in plain text until the recorder purges the event, after 10 days by
   default (`purge_keep_days`), and in each backup that includes the database. A recorder `exclude` of the event type
   `call_service` keeps every action call out of the database.
+- With **Status answer** on, the status action's response holds the PIN of the slot it reads, so the PIN is in any
+  automation or script variable that holds the response, and in a trace that records it.
 - With the `yalexs_ble` logger at debug, yalexs-ble logs each frame it receives from the lock, decrypted, in
   hexadecimal, and the lock's answers to a set and to a status read hold the PIN.
 
