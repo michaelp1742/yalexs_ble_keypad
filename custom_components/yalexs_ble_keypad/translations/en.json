@@ -12,6 +12,21 @@
       }
     }
   },
+  "entity": {
+    "event": {
+      "programming": {
+        "name": "PIN programming",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "pin_cleared": "PIN cleared",
+              "pin_set": "PIN set"
+            }
+          }
+        }
+      }
+    }
+  },
   "exceptions": {
     "communication_error": {
       "message": "Failed to communicate with the lock."

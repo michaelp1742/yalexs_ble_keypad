@@ -13,6 +13,7 @@ from yalexs_ble import KeycodeError, OperationError, YaleXSBLEError
 from homeassistant.components.lock import DOMAIN as LOCK_DOMAIN
 from homeassistant.const import CONF_ADDRESS
 from homeassistant.core import (
+    Context,
     HomeAssistant,
     ServiceCall,
     ServiceResponse,
@@ -35,6 +36,8 @@ from .const import (
     CONF_STATUS_RESULT,
     CREDENTIAL_TYPE_PIN,
     DOMAIN,
+    EVENT_PIN_CLEARED,
+    EVENT_PIN_SET,
     MAX_SLOT,
     OWNER_DOMAIN,
     PIN_PATTERN,
@@ -230,8 +233,18 @@ def _slot_holding_pin(
     return None
 
 
+def _cloud_pin_at(slot: int, cloud_pins: tuple[CloudPin, ...]) -> str | None:
+    """Return the PIN of the cloud record's entry at the slot, or None when the record has no entry there."""
+    return next(
+        (cloud_pin.pin for cloud_pin in cloud_pins if cloud_pin.slot == slot), None
+    )
+
+
 async def _async_set_credential(
-    hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
+    hass: HomeAssistant,
+    entry: YaleXSBLEKeypadConfigEntry,
+    data: Mapping[str, Any],
+    context: Context,
 ) -> None:
     """Set a keypad PIN on the entry's lock."""
     parameters = lock_pin_parameters(hass, entry.runtime_data.address)
@@ -288,14 +301,19 @@ async def _async_set_credential(
         # Programming may have started, so the slot's record might be wrong.
         await pins.async_remove(slot)
         raise
-    await pins.async_set(
-        slot,
-        StoredPin(pin=pin, name=data.get(YaleXSBLEKeypadServiceArgument.NAME) or None),
+    stored = StoredPin(
+        pin=pin, name=data.get(YaleXSBLEKeypadServiceArgument.NAME) or None
     )
+    await pins.async_set(slot, stored)
+    if (event := entry.runtime_data.programming_event) is not None:
+        event.async_record(context, EVENT_PIN_SET, slot, stored.name, pin)
 
 
 async def _async_clear_credential(
-    hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry, data: Mapping[str, Any]
+    hass: HomeAssistant,
+    entry: YaleXSBLEKeypadConfigEntry,
+    data: Mapping[str, Any],
+    context: Context,
 ) -> None:
     """Clear a keypad PIN on the entry's lock."""
     parameters = lock_pin_parameters(hass, entry.runtime_data.address)
@@ -304,6 +322,7 @@ async def _async_clear_credential(
     _check_slot(slot, parameters)
     _check_not_master_code_slot(slot, parameters)
     pins = entry.runtime_data.pins
+    stored = pins.get(slot)
     try:
         with _translate_keycode_errors():
             await entry.runtime_data.lock.clear_keycode(slot)
@@ -316,6 +335,14 @@ async def _async_clear_credential(
         await pins.async_remove(slot)
         raise
     await pins.async_remove(slot)
+    if (event := entry.runtime_data.programming_event) is not None:
+        event.async_record(
+            context,
+            EVENT_PIN_CLEARED,
+            slot,
+            stored.name if stored else None,
+            stored.pin if stored else _cloud_pin_at(slot, parameters.cloud_pins),
+        )
 
 
 async def _async_credential_status(
@@ -377,7 +404,10 @@ async def async_set_lock_credential(call: ServiceCall) -> None:
     hass = call.hass
     for entry_id in _async_target_entries(hass, call):
         await _async_set_credential(
-            hass, hass.config_entries.async_get_known_entry(entry_id), call.data
+            hass,
+            hass.config_entries.async_get_known_entry(entry_id),
+            call.data,
+            call.context,
         )
 
 
@@ -386,7 +416,10 @@ async def async_clear_lock_credential(call: ServiceCall) -> None:
     hass = call.hass
     for entry_id in _async_target_entries(hass, call):
         await _async_clear_credential(
-            hass, hass.config_entries.async_get_known_entry(entry_id), call.data
+            hass,
+            hass.config_entries.async_get_known_entry(entry_id),
+            call.data,
+            call.context,
         )
 
 

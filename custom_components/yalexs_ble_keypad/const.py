@@ -46,3 +46,10 @@ DEFAULT_PIN_LENGTH = 5
 CONF_STATUS_RESULT = "status_result"
 
 DEFAULT_OPTIONS: Final[dict[str, Any]] = {CONF_STATUS_RESULT: True}
+
+EVENT_PIN_SET = "pin_set"
+EVENT_PIN_CLEARED = "pin_cleared"
+
+ATTR_SLOT = "slot"
+ATTR_NAME = "name"
+ATTR_PIN = "pin"

@@ -9,7 +9,11 @@ from bleak.exc import BleakDBusError, BleakError
 from bleak_retry_connector import BleakNotFoundError, BleakOutOfConnectionSlotsError
 import probatio
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    MockUser,
+    async_capture_events,
+)
 from yalexs_ble import KeycodeError, YaleXSBLEError
 from yalexs_ble.const import OperationError
 from yalexs_ble.session import ResponseError
@@ -18,7 +22,7 @@ from custom_components.yalexs_ble_keypad.const import DOMAIN, OWNER_DOMAIN
 from custom_components.yalexs_ble_keypad.store import PinStore
 from homeassistant.components.lock import DOMAIN as LOCK_DOMAIN
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.const import CONF_ADDRESS, EVENT_STATE_CHANGED, STATE_UNKNOWN
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.exceptions import (
     HomeAssistantError,
@@ -32,6 +36,7 @@ from . import ADDRESS, TITLE, async_setup_cloud, async_setup_owner, cloud_record
 
 ENTITY_ID = "lock.front_door"
 SECURE_ENTITY_ID = "lock.front_door_secure_mode"
+EVENT_ENTITY_ID = "event.front_door_keypad_pin_programming"
 STORAGE_KEY = "yalexs_ble_keypad.{}.pins"
 GUEST = {"3": {"pin": "4321", "name": "Guest"}}
 
@@ -370,6 +375,7 @@ async def test_set_credential_errors(
             {"credential_data": "1234", "credential_index": 3, "name": "Nope"},
         )
     assert not any(key.startswith("yalexs_ble_keypad.") for key in hass_storage)
+    assert hass.states.get(EVENT_ENTITY_ID).state == STATE_UNKNOWN
 
 
 @pytest.mark.usefixtures("entry")
@@ -565,6 +571,7 @@ async def test_clear_credential_error(hass: HomeAssistant, mock_lock: MockLock) 
     mock_lock.push_lock.clear_keycode.side_effect = YaleXSBLEError("boom")
     with pytest.raises(HomeAssistantError, match="Failed to communicate"):
         await _call(hass, "clear_lock_credential", {"credential_index": 8})
+    assert hass.states.get(EVENT_ENTITY_ID).state == STATE_UNKNOWN
 
 
 @pytest.mark.usefixtures("entry")
@@ -578,6 +585,7 @@ async def test_credential_status(hass: HomeAssistant, mock_lock: MockLock) -> No
         "set_lock_credential",
         {"credential_data": "4321", "credential_index": 9, "name": "Nan"},
     )
+    event_state = hass.states.get(EVENT_ENTITY_ID)
     mock_lock.push_lock.get_keycode.return_value = "4321"
 
     response = await _call(
@@ -599,6 +607,7 @@ async def test_credential_status(hass: HomeAssistant, mock_lock: MockLock) -> No
         return_response=True,
     )
     assert response == {ENTITY_ID: {"credential_exists": False, "name": None}}
+    assert hass.states.get(EVENT_ENTITY_ID) == event_state
 
 
 @pytest.mark.usefixtures("entry")
@@ -884,6 +893,7 @@ async def test_cancelled_set_credential_removes_record(
 ) -> None:
     """Test cancelling a set after programming started drops the slot's record."""
     await _set_guest(hass)
+    event_state = hass.states.get(EVENT_ENTITY_ID)
     started = asyncio.Event()
 
     async def hang(slot: int, pin: str) -> None:
@@ -904,6 +914,7 @@ async def test_cancelled_set_credential_removes_record(
         await task
 
     assert _stored_pins(hass_storage, entry) == {}
+    assert hass.states.get(EVENT_ENTITY_ID) == event_state
 
 
 async def test_unload_waits_for_in_flight_name_save_before_removal(
@@ -1455,3 +1466,124 @@ async def test_set_at_a_kept_slot_is_refused_after_the_read(
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(3)
     mock_lock.push_lock.set_keycode.assert_not_awaited()
     assert _stored_pins(hass_storage, entry) == expected
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    ("name_field", "name"),
+    [
+        pytest.param({"name": "Cleaner"}, "Cleaner", id="named"),
+        pytest.param({}, None, id="no_name_at_a_named_slot"),
+    ],
+)
+async def test_set_records_pin_set_under_the_call_context(
+    hass: HomeAssistant,
+    hass_admin_user: MockUser,
+    name_field: dict[str, str],
+    name: str | None,
+) -> None:
+    """A set writes the programming event once, under the call's context, with the slot, the name the store now holds, and the PIN written."""
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "4321", "credential_index": 12, "name": "Old"},
+    )
+    events = async_capture_events(hass, EVENT_STATE_CHANGED)
+    context = Context(user_id=hass_admin_user.id)
+
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "1234", "credential_index": 12, **name_field},
+        context=context,
+    )
+
+    (event,) = [e for e in events if e.data["entity_id"] == EVENT_ENTITY_ID]
+    state = event.data["new_state"]
+    assert state == hass.states.get(EVENT_ENTITY_ID)
+    assert state.context is context
+    assert state.attributes["event_type"] == "pin_set"
+    assert (
+        state.attributes["slot"],
+        state.attributes["name"],
+        state.attributes["pin"],
+    ) == (12, name, "1234")
+
+
+@pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    ("slot", "name", "pin"),
+    [
+        pytest.param(12, "Cleaner", "123456", id="kept"),
+        pytest.param(20, None, "975310", id="cloud_record"),
+        pytest.param(30, None, None, id="neither"),
+    ],
+)
+async def test_clear_records_pin_cleared_with_the_slots_pin(
+    hass: HomeAssistant,
+    hass_admin_user: MockUser,
+    mock_lock: MockLock,
+    slot: int,
+    name: str | None,
+    pin: str | None,
+) -> None:
+    """A clear writes the programming event once, under the call's context, with the name the store held and the kept PIN, else the cloud record's PIN at the slot, else none."""
+    # A constructed pins block with one entry in the loaded state at slot 20.
+    record = {
+        **FRONT_DOOR_RECORD,
+        "pins": {
+            "loaded": [{"slot": 20, "pin": "975310", "state": "loaded", "type": "pin"}]
+        },
+    }
+    await async_setup_cloud(hass, [record], {"front": FRONT_DOOR_CAPABILITIES})
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "123456", "credential_index": 12, "name": "Cleaner"},
+    )
+    events = async_capture_events(hass, EVENT_STATE_CHANGED)
+    context = Context(user_id=hass_admin_user.id)
+
+    await _call(
+        hass, "clear_lock_credential", {"credential_index": slot}, context=context
+    )
+
+    mock_lock.push_lock.clear_keycode.assert_awaited_once_with(slot)
+    (event,) = [e for e in events if e.data["entity_id"] == EVENT_ENTITY_ID]
+    state = event.data["new_state"]
+    assert state.context is context
+    assert state.attributes["event_type"] == "pin_cleared"
+    assert (
+        state.attributes["slot"],
+        state.attributes["name"],
+        state.attributes["pin"],
+    ) == (slot, name, pin)
+
+
+async def test_set_with_the_event_disabled_records_nothing(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+    entity_registry: er.EntityRegistry,
+    mock_lock: MockLock,
+    entry: MockConfigEntry,
+    hass_storage: dict[str, Any],
+) -> None:
+    """A set with the programming event disabled in the registry stores the PIN, writes no state, and triggers no update of the disabled entity."""
+    entity_registry.async_update_entity(
+        EVENT_ENTITY_ID, disabled_by=er.RegistryEntryDisabler.USER
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(EVENT_ENTITY_ID) is None
+
+    await _call(
+        hass,
+        "set_lock_credential",
+        {"credential_data": "1234", "credential_index": 12, "name": "Cleaner"},
+    )
+
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(12, "1234")
+    assert _stored_pins(hass_storage, entry) == {
+        "12": {"pin": "1234", "name": "Cleaner"}
+    }
+    assert hass.states.get(EVENT_ENTITY_ID) is None
+    assert "incorrectly being triggered" not in caplog.text

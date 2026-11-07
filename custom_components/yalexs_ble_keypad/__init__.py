@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from homeassistant.const import CONF_ADDRESS
+from homeassistant.const import CONF_ADDRESS, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from homeassistant.components.yalexs_ble import YALEXSBLEConfigEntry
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+PLATFORMS = [Platform.EVENT]
 
 
 @callback
@@ -66,6 +68,7 @@ async def async_setup_entry(
         hass.loop.call_soon(hass.config_entries.async_schedule_reload, entry.entry_id)
 
     entry.async_on_unload(owner.async_on_state_change(_async_owner_changed))
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
@@ -73,7 +76,7 @@ async def async_unload_entry(
     hass: HomeAssistant, entry: YaleXSBLEKeypadConfigEntry
 ) -> bool:
     """Unload a config entry."""
-    return True
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
 async def async_remove_entry(

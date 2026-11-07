@@ -1,4 +1,11 @@
 {
+  "entity": {
+    "event": {
+      "programming": {
+        "default": "mdi:key-plus"
+      }
+    }
+  },
   "services": {
     "clear_lock_credential": {
       "service": "mdi:key-remove"
