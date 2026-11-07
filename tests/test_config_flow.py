@@ -40,7 +40,6 @@ async def test_user_flow_adds_each_loaded_lock_once(hass: HomeAssistant) -> None
     assert result["title"] == TITLE
     assert result["data"] == {CONF_ADDRESS: ADDRESS}
     assert result["options"] == {
-        "cloud_pin_rules": False,
         "slot_field_width": False,
         "status_result": False,
         "occupancy_cloud_pins": False,
@@ -73,7 +72,6 @@ async def test_options_flow_stores_the_switches_and_reloads(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     runtime_data = config_entry.runtime_data
     switches = {
-        "cloud_pin_rules": True,
         "slot_field_width": True,
         "status_result": True,
         "occupancy_cloud_pins": True,
@@ -83,7 +81,6 @@ async def test_options_flow_stores_the_switches_and_reloads(
     result = await hass.config_entries.options.async_init(config_entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert result["data_schema"]({}) == {
-        "cloud_pin_rules": False,
         "slot_field_width": False,
         "status_result": False,
         "occupancy_cloud_pins": False,

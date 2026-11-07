@@ -8,7 +8,6 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CLOUD_DOMAIN,
-    CONF_CLOUD_PIN_RULES,
     DEFAULT_PIN_LENGTH,
     MASTER_CODE_SLOT,
     MAX_PIN_LENGTH,
@@ -84,32 +83,24 @@ def _pin_slot_range(capabilities: Mapping[str, Any]) -> tuple[int, int]:
 
 
 @callback
-def lock_pin_parameters(
-    hass: HomeAssistant, address: str, options: Mapping[str, Any]
-) -> LockPinParameters:
+def lock_pin_parameters(hass: HomeAssistant, address: str) -> LockPinParameters:
     """Return the PIN parameters of the lock at the address, read from its cloud record on each call."""
     detail = async_cloud_lock_detail(hass, address)
-    capabilities = None if detail is None else _lock_capabilities(detail)
     has_keypad: bool | None = None
     pin_length_min, pin_length_max = MIN_PIN_LENGTH, MAX_PIN_LENGTH
     pin_slot_min, pin_slot_max = MIN_PIN_SLOT, MAX_PIN_SLOT
     master_pin_slot: int | None = MASTER_CODE_SLOT
-    if (
-        options[CONF_CLOUD_PIN_RULES]
-        and detail is not None
-        and capabilities is not None
-    ):
+    if detail is not None and (capabilities := _lock_capabilities(detail)) is not None:
         has_keypad = (
             detail.keypad is not None or capabilities.get("integratedKeypad") is True
         )
         pin_length_min, pin_length_max = _pin_length_range(capabilities)
+        pin_slot_min, pin_slot_max = _pin_slot_range(capabilities)
         master_pin_slot = (
             slot
             if isinstance(slot := capabilities.get("masterPinSlot"), int) and slot > 0
             else None
         )
-    if capabilities is not None:
-        pin_slot_min, pin_slot_max = _pin_slot_range(capabilities)
     return LockPinParameters(
         record_read=detail is not None,
         has_keypad=has_keypad,

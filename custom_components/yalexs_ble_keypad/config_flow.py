@@ -20,7 +20,6 @@ from homeassistant.helpers.selector import (
 
 from . import async_loaded_owners
 from .const import (
-    CONF_CLOUD_PIN_RULES,
     CONF_OCCUPANCY_CLOUD_PINS,
     CONF_OCCUPANCY_READ,
     CONF_SLOT_FIELD_WIDTH,
@@ -103,9 +102,6 @@ class OptionsFlowHandler(OptionsFlowWithReload):
             step_id="init",
             data_schema=probatio.Schema(
                 {
-                    probatio.Required(
-                        CONF_CLOUD_PIN_RULES, default=options[CONF_CLOUD_PIN_RULES]
-                    ): bool,
                     probatio.Required(
                         CONF_SLOT_FIELD_WIDTH, default=options[CONF_SLOT_FIELD_WIDTH]
                     ): bool,

@@ -243,7 +243,7 @@ async def _async_set_credential(
 ) -> None:
     """Set a keypad PIN on the entry's lock."""
     options = entry_options(entry)
-    parameters = lock_pin_parameters(hass, entry.runtime_data.address, options)
+    parameters = lock_pin_parameters(hass, entry.runtime_data.address)
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot, parameters, options)
@@ -301,7 +301,7 @@ async def _async_clear_credential(
 ) -> None:
     """Clear a keypad PIN on the entry's lock."""
     options = entry_options(entry)
-    parameters = lock_pin_parameters(hass, entry.runtime_data.address, options)
+    parameters = lock_pin_parameters(hass, entry.runtime_data.address)
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot, parameters, options)
@@ -326,7 +326,7 @@ async def _async_credential_status(
 ) -> dict[str, bool | str | None]:
     """Read a keypad PIN slot from the entry's lock."""
     options = entry_options(entry)
-    parameters = lock_pin_parameters(hass, entry.runtime_data.address, options)
+    parameters = lock_pin_parameters(hass, entry.runtime_data.address)
     _check_keypad(parameters)
     slot: int = data[YaleXSBLEKeypadServiceArgument.CREDENTIAL_INDEX]
     _check_slot(slot, parameters, options)

@@ -944,29 +944,66 @@ async def test_failed_clear_credential_record_handling(
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", [{"cloud_pin_rules": True}])
-async def test_cloud_pin_rules_check_the_pin_length_from_the_record(
-    hass: HomeAssistant, mock_lock: MockLock
+@pytest.mark.parametrize(
+    "options", [pytest.param({"cloud_pin_rules": False}, id="stored_off")]
+)
+@pytest.mark.parametrize(
+    ("capabilities", "refused_pin", "key", "placeholders", "sent_pin"),
+    [
+        pytest.param(
+            FRONT_DOOR_CAPABILITIES,
+            "12345",
+            "invalid_pin_length",
+            {"length": "6"},
+            "123456",
+            id="pin_length",
+        ),
+        pytest.param(
+            {"lock": {"pinLengthMin": 4, "pinLengthMax": 8}},
+            "123",
+            "invalid_pin",
+            {"min": "4", "max": "8"},
+            "1234",
+            id="pin_length_range",
+        ),
+        pytest.param(
+            {"lock": {}},
+            "123456",
+            "invalid_pin_length",
+            {"length": "5"},
+            "12345",
+            id="no_length_key",
+        ),
+    ],
+)
+async def test_pin_length_from_the_record(
+    hass: HomeAssistant,
+    mock_lock: MockLock,
+    capabilities: dict[str, Any],
+    refused_pin: str,
+    key: str,
+    placeholders: dict[str, str],
+    sent_pin: str,
 ) -> None:
-    """With the cloud PIN rules on, a PIN of a length other than the record's is refused and one of its length is sent."""
-    await async_setup_cloud(
-        hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
-    )
+    """A PIN of a length the record does not allow is refused before any frame, and one of an allowed length is sent, on an entry that stored cloud_pin_rules off."""
+    await async_setup_cloud(hass, [FRONT_DOOR_RECORD], {"front": capabilities})
 
-    with pytest.raises(ServiceValidationError, match="The PIN must be 6 digits"):
+    with pytest.raises(ServiceValidationError) as exc_info:
         await _call(
             hass,
             "set_lock_credential",
-            {"credential_data": "12345", "credential_index": 12},
+            {"credential_data": refused_pin, "credential_index": 12},
         )
+    assert exc_info.value.translation_key == key
+    assert exc_info.value.translation_placeholders == placeholders
     mock_lock.push_lock.set_keycode.assert_not_awaited()
 
     await _call(
         hass,
         "set_lock_credential",
-        {"credential_data": "123456", "credential_index": 12},
+        {"credential_data": sent_pin, "credential_index": 12},
     )
-    mock_lock.push_lock.set_keycode.assert_awaited_once_with(12, "123456")
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(12, sent_pin)
 
 
 @pytest.mark.usefixtures("entry")
@@ -984,28 +1021,23 @@ async def test_slot_range_from_the_record(
     await _call(
         hass,
         "set_lock_credential",
-        {"credential_data": "1234", "credential_index": 100},
+        {"credential_data": "123456", "credential_index": 100},
     )
-    mock_lock.push_lock.set_keycode.assert_awaited_once_with(100, "1234")
+    mock_lock.push_lock.set_keycode.assert_awaited_once_with(100, "123456")
 
     with pytest.raises(ServiceValidationError) as exc_info:
         await _call(
             hass,
             "set_lock_credential",
-            {"credential_data": "5678", "credential_index": 101},
+            {"credential_data": "567890", "credential_index": 101},
         )
     assert exc_info.value.translation_key == "invalid_slot"
     assert exc_info.value.translation_placeholders == {"min": "1", "max": "100"}
     mock_lock.push_lock.set_keycode.assert_awaited_once()
 
 
-# The master code's slot is 65518 both as the fallback and in the Front Door's record.
-FIELD_WIDTH_OPTIONS = [
-    pytest.param({"slot_field_width": True}, id="fallback_master_slot"),
-    pytest.param(
-        {"slot_field_width": True, "cloud_pin_rules": True}, id="record_master_slot"
-    ),
-]
+# The master code's slot in the Front Door's record is 65518.
+FIELD_WIDTH_OPTIONS = [pytest.param({"slot_field_width": True}, id="field_width")]
 
 
 @pytest.mark.usefixtures("entry")
@@ -1134,7 +1166,7 @@ async def test_occupancy_cloud_pins_refuses_a_slot_in_the_pins_block(
         await _call(
             hass,
             "set_lock_credential",
-            {"credential_data": "1234", "credential_index": 100},
+            {"credential_data": "123456", "credential_index": 100},
         )
     assert exc_info.value.translation_key == "slot_in_use"
     assert exc_info.value.translation_placeholders == {"slot": "100"}
