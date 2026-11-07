@@ -71,7 +71,7 @@ def mock_lock() -> MockLock:
 
 @pytest.fixture
 def options() -> dict[str, Any]:
-    """Return the keypad entry's options: none, so every switch is off."""
+    """Return the keypad entry's options: none, so each option takes its default."""
     return {}
 
 
@@ -189,7 +189,9 @@ async def test_reload_keeps_stored_pins(
     )
 
     assert entry.state is ConfigEntryState.LOADED
-    assert response == {ENTITY_ID: {"credential_exists": True, "name": "Cleaner"}}
+    assert response == {
+        ENTITY_ID: {"credential_exists": True, "name": "Cleaner", "result": "pin"}
+    }
     assert hass_storage[STORAGE_KEY.format(entry.entry_id)] == stored
 
 
@@ -246,7 +248,9 @@ async def test_set_credential_empty_name_on_empty_slot_stores_no_name(
     )
 
     assert _stored_pins(hass_storage, entry) == {"5": {"pin": "5678", "name": None}}
-    assert response == {ENTITY_ID: {"credential_exists": True, "name": None}}
+    assert response == {
+        ENTITY_ID: {"credential_exists": True, "name": None, "result": "pin"}
+    }
 
 
 @pytest.mark.usefixtures("entry")
@@ -382,12 +386,13 @@ async def test_failed_set_credential_record_handling(
 
 @pytest.mark.usefixtures("entry")
 @pytest.mark.parametrize(
-    ("method", "service", "data", "extra"),
+    ("method", "service", "data", "extra", "options"),
     [
         pytest.param(
             "set_keycode",
             "set_lock_credential",
             {"credential_data": "1234", "credential_index": 3},
+            {},
             {},
             id="set",
         ),
@@ -396,6 +401,7 @@ async def test_failed_set_credential_record_handling(
             "clear_lock_credential",
             {"credential_index": 3},
             {},
+            {},
             id="clear",
         ),
         pytest.param(
@@ -403,7 +409,8 @@ async def test_failed_set_credential_record_handling(
             "get_lock_credential_status",
             {"credential_index": 3},
             {"return_response": True},
-            id="status",
+            {"status_result": False},
+            id="status_answer_off",
         ),
     ],
 )
@@ -459,6 +466,9 @@ async def test_credential_services_translate_library_errors(
 
 
 @pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    "options", [pytest.param({"status_result": False}, id="status_answer_off")]
+)
 @pytest.mark.parametrize(
     ("error", "translation_key"),
     [
@@ -532,8 +542,11 @@ async def test_clear_credential_error(hass: HomeAssistant, mock_lock: MockLock) 
 
 
 @pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    "options", [pytest.param({"status_result": False}, id="status_answer_off")]
+)
 async def test_credential_status(hass: HomeAssistant, mock_lock: MockLock) -> None:
-    """Test status reports existence and name but never the PIN."""
+    """Test status with the status answer off reports existence and name but never the PIN."""
     await _call(
         hass,
         "set_lock_credential",
@@ -563,20 +576,26 @@ async def test_credential_status(hass: HomeAssistant, mock_lock: MockLock) -> No
 
 
 @pytest.mark.usefixtures("entry")
+@pytest.mark.parametrize(
+    "options", [pytest.param({"status_result": False}, id="status_answer_off")]
+)
 async def test_credential_status_error(
     hass: HomeAssistant, mock_lock: MockLock
 ) -> None:
-    """Test status errors are translated."""
+    """Test a failed status read with the status answer off raises its translated error."""
     mock_lock.push_lock.get_keycode.side_effect = KeycodeError(
         "get_keycode", OperationError.KEYCODE_TIMEOUT
     )
-    with pytest.raises(HomeAssistantError, match="rejected the keypad request"):
+    with pytest.raises(
+        HomeAssistantError, match="rejected the keypad request"
+    ) as exc_info:
         await _call(
             hass,
             "get_lock_credential_status",
             {"credential_index": 9},
             return_response=True,
         )
+    assert exc_info.value.translation_key == "keycode_error"
 
 
 @pytest.mark.usefixtures("entry")
@@ -708,7 +727,7 @@ async def test_device_target_status_shared(
     )
 
     mock_lock.push_lock.get_keycode.assert_awaited_once_with(9)
-    expected = {"credential_exists": True, "name": None}
+    expected = {"credential_exists": True, "name": None, "result": "pin"}
     assert response == {ENTITY_ID: expected, SECURE_ENTITY_ID: expected}
 
 
@@ -756,8 +775,16 @@ async def test_parallel_status_different_slots_both_run(
         )
     )
 
-    assert first[ENTITY_ID] == {"credential_exists": True, "name": None}
-    assert second[ENTITY_ID] == {"credential_exists": False, "name": None}
+    assert first[ENTITY_ID] == {
+        "credential_exists": True,
+        "name": None,
+        "result": "pin",
+    }
+    assert second[ENTITY_ID] == {
+        "credential_exists": False,
+        "name": None,
+        "result": "empty",
+    }
 
 
 @pytest.mark.parametrize(
@@ -1141,7 +1168,6 @@ async def test_set_and_clear_refuse_the_master_code_slot_inside_the_range(
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", [{"status_result": True}])
 @pytest.mark.parametrize(
     ("side_effect", "expected"),
     [
@@ -1178,7 +1204,7 @@ async def test_status_result_returns_the_slots_result_without_raising(
     side_effect: Any,
     expected: dict[str, bool | str | None],
 ) -> None:
-    """With the status answer on, the status action returns the slot's result and raises no error for a refusal, a malformed PIN field, or no answer."""
+    """With the status answer at its default, the status action returns the slot's result and raises no error for a refusal, a malformed PIN field, or no answer."""
     await _set_guest(hass)
     mock_lock.push_lock.get_keycode.side_effect = side_effect
 

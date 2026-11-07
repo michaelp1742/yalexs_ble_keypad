@@ -25,5 +25,5 @@ type YaleXSBLEKeypadConfigEntry = ConfigEntry[YaleXSBLEKeypadData]
 
 
 def entry_options(entry: ConfigEntry) -> dict[str, Any]:
-    """Return the entry's options, with each option the entry does not hold at its off value."""
+    """Return the entry's options, with each option the entry does not hold at its default."""
     return {**DEFAULT_OPTIONS, **entry.options}

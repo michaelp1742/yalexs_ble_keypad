@@ -48,7 +48,7 @@ CONF_OCCUPANCY_CLOUD_PINS = "occupancy_cloud_pins"
 CONF_OCCUPANCY_READ = "occupancy_read"
 
 DEFAULT_OPTIONS: Final[dict[str, Any]] = {
-    CONF_STATUS_RESULT: False,
+    CONF_STATUS_RESULT: True,
     CONF_OCCUPANCY_CLOUD_PINS: False,
     CONF_OCCUPANCY_READ: False,
 }

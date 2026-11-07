@@ -40,7 +40,7 @@ async def test_user_flow_adds_each_loaded_lock_once(hass: HomeAssistant) -> None
     assert result["title"] == TITLE
     assert result["data"] == {CONF_ADDRESS: ADDRESS}
     assert result["options"] == {
-        "status_result": False,
+        "status_result": True,
         "occupancy_cloud_pins": False,
         "occupancy_read": False,
     }
@@ -63,11 +63,23 @@ async def test_user_flow_adds_each_loaded_lock_once(hass: HomeAssistant) -> None
     assert result["reason"] == "no_locks"
 
 
+# The options an entry made by v0.1.0 stored.
+V0_1_0_OPTIONS = {
+    "cloud_pin_rules": False,
+    "slot_range_source": "constants",
+    "slot_field_width": False,
+    "status_result": False,
+    "occupancy_cloud_pins": False,
+    "occupancy_read": False,
+}
+
+
 @pytest.mark.usefixtures("owner_entry")
-async def test_options_flow_stores_the_switches_and_reloads(
+async def test_options_flow_offers_the_stored_values_and_reloads(
     hass: HomeAssistant, config_entry: MockConfigEntry
 ) -> None:
-    """The options form offers each switch at its off value, and a submit stores the switches and reloads the entry."""
+    """The options form offers each option at the value an existing entry stored, and a submit stores the options and reloads the entry."""
+    hass.config_entries.async_update_entry(config_entry, options=V0_1_0_OPTIONS)
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     runtime_data = config_entry.runtime_data
     switches = {
