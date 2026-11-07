@@ -970,11 +970,13 @@ async def test_cloud_pin_rules_check_the_pin_length_from_the_record(
 
 
 @pytest.mark.usefixtures("entry")
-@pytest.mark.parametrize("options", [{"slot_range_source": "cloud"}])
-async def test_cloud_slot_range_from_the_record(
+@pytest.mark.parametrize(
+    "options", [pytest.param({"slot_range_source": "constants"}, id="stored_constants")]
+)
+async def test_slot_range_from_the_record(
     hass: HomeAssistant, mock_lock: MockLock
 ) -> None:
-    """With the slot range from the cloud, the record's top slot is sent and the slot past it is refused with the record's range."""
+    """The record's top slot is sent and the slot past it is refused with the record's range, whatever slot_range_source value the entry stored."""
     await async_setup_cloud(
         hass, [FRONT_DOOR_RECORD], {"front": FRONT_DOOR_CAPABILITIES}
     )
@@ -986,12 +988,14 @@ async def test_cloud_slot_range_from_the_record(
     )
     mock_lock.push_lock.set_keycode.assert_awaited_once_with(100, "1234")
 
-    with pytest.raises(ServiceValidationError, match="The slot must be from 1 to 100"):
+    with pytest.raises(ServiceValidationError) as exc_info:
         await _call(
             hass,
             "set_lock_credential",
             {"credential_data": "5678", "credential_index": 101},
         )
+    assert exc_info.value.translation_key == "invalid_slot"
+    assert exc_info.value.translation_placeholders == {"min": "1", "max": "100"}
     mock_lock.push_lock.set_keycode.assert_awaited_once()
 
 

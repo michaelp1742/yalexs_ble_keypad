@@ -9,14 +9,12 @@ from homeassistant.core import HomeAssistant, callback
 from .const import (
     CLOUD_DOMAIN,
     CONF_CLOUD_PIN_RULES,
-    CONF_SLOT_RANGE_SOURCE,
     DEFAULT_PIN_LENGTH,
     MASTER_CODE_SLOT,
     MAX_PIN_LENGTH,
     MAX_PIN_SLOT,
     MIN_PIN_LENGTH,
     MIN_PIN_SLOT,
-    SLOT_RANGE_CLOUD,
 )
 
 if TYPE_CHECKING:
@@ -110,7 +108,7 @@ def lock_pin_parameters(
             if isinstance(slot := capabilities.get("masterPinSlot"), int) and slot > 0
             else None
         )
-    if options[CONF_SLOT_RANGE_SOURCE] == SLOT_RANGE_CLOUD and capabilities is not None:
+    if capabilities is not None:
         pin_slot_min, pin_slot_max = _pin_slot_range(capabilities)
     return LockPinParameters(
         record_read=detail is not None,
