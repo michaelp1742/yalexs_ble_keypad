@@ -40,7 +40,7 @@ is sent to the lock, the master code's slot included when it is outside the rang
 | `credential_type` | `pin`, the only type |
 | `credential_data` | the PIN, in digits |
 | `credential_index` | the slot |
-| `name` | optional: a name for the slot. Left out or empty, the slot keeps the name this integration has for it. |
+| `name` | optional: a name for the slot, stored with the PIN. Each set replaces the slot's name, so a set that leaves `name` out or empty stores no name, even when the slot had one. |
 
 Before anything is sent to the lock, the action refuses:
 
@@ -61,7 +61,8 @@ since the slot no longer holds the PIN this integration wrote. A read that fails
 the slot's record stays as it was.
 
 The action then writes the PIN with yalexs-ble's `set_keycode`, which clears the slot and then writes the PIN, valid
-at all times. When the lock has answered every step, the integration keeps the PIN and the slot's name.
+at all times. When the lock has answered every step, the integration keeps the PIN with the name the call gave, or
+with no name when it gave none.
 
 When the write fails with `lock_not_running`, or because the lock refused the clear that starts the set, the integration
 keeps the slot's record. On any other failure of the write, and when the call is cancelled while the write runs, it

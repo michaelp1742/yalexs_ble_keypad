@@ -288,10 +288,10 @@ async def _async_set_credential(
         # Programming may have started, so the slot's record might be wrong.
         await pins.async_remove(slot)
         raise
-    name = data.get(YaleXSBLEKeypadServiceArgument.NAME) or (
-        stored.name if (stored := pins.get(slot)) else None
+    await pins.async_set(
+        slot,
+        StoredPin(pin=pin, name=data.get(YaleXSBLEKeypadServiceArgument.NAME) or None),
     )
-    await pins.async_set(slot, StoredPin(pin=pin, name=name))
 
 
 async def _async_clear_credential(

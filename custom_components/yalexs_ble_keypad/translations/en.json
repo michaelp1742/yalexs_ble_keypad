@@ -131,7 +131,7 @@
           "name": "Credential type"
         },
         "name": {
-          "description": "A label for the slot. Leave empty to keep the existing label.",
+          "description": "A name for the slot, stored with the PIN. Each set replaces the name, so leaving this empty stores no name, even when the slot had one.",
           "name": "Name"
         }
       },
