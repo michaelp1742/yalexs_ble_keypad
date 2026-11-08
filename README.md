@@ -161,10 +161,10 @@ is outside the range of 1 to 250, and `invalid_slot` refuses it first.
 
 Each entry adds one event entity, such as `event.front_door_keypad_pin_programming`, named **Front Door Keypad PIN
 programming**, enabled by default. After a set or clear that the lock answered, the action writes the entity's state
-once, under the action call's context, so the set or clear appears in the logbook and in the activity of the **Front
-Door Keypad** device under the user who called the action, after the action call itself. The entity's state is the time
-of the last set or clear, and its `event_type` is one of two event types, for an `event.received` trigger or a state
-trigger:
+once, under the action call's context. The set or clear then appears under the user who called the action, after the
+action call itself, in the **Activity** panel and in the **Activity** card of the lock's device page and of the **Front
+Door Keypad** device page. The entity's state is the time of the last set or clear, and its `event_type` is one of two
+event types, for an `event.received` trigger or a state trigger:
 
 | `event_type` | Shown as | When |
 |---|---|---|
